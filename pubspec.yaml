@@ -1,0 +1,68 @@
+name: zipline
+description: "Zipline - Fast and easy file transfer tool for LAN users"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  # Network and file handling
+  http: ^1.1.0
+  dio: ^5.3.2
+  path_provider: ^2.1.1
+  file_picker: ^6.1.1
+  # UI and state management
+  provider: ^6.1.1
+  flutter_bloc: ^8.1.3
+  # System integration
+  system_tray: ^2.0.3
+  window_manager: ^0.3.7
+  local_notifier: ^0.1.5
+  # Network discovery
+  network_info_plus: ^4.1.0
+  # JSON serialization
+  json_annotation: ^4.8.1
+  # Utilities
+  shared_preferences: ^2.2.2
+  uuid: ^3.0.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  # Code generation
+  json_serializable: ^6.7.1
+  build_runner: ^2.4.7
+
+# For information on the generic Dart part of this file, see the
+# following page: https://dart.dev/tools/pub/pubspec
+
+# The following section is specific to Flutter packages.
+flutter:
+
+  # The following line ensures that the Material Icons font is
+  # included with your application, so that you can use the icons in
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
+    - assets/fonts/
+
+  fonts:
+    - family: Klill
+      fonts:
+        - asset: assets/fonts/Klill-Light.ttf
+          weight: 300
+    - family: LiberationSans
+      fonts:
+        - asset: assets/fonts/LiberationSans-Regular.ttf
+          weight: 400
+    - family: KGLikeASkyscraper
+      fonts:
+        - asset: assets/fonts/KGLikeASkyscraper.ttf
+          weight: 400
