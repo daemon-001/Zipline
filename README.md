@@ -184,21 +184,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-- **Email**: support@zipline.app
-- **Issues**: [GitHub Issues](https://github.com/yourusername/zipline/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/zipline/discussions)
-- **Documentation**: [Wiki](https://github.com/yourusername/zipline/wiki)
+- **Email**: nitesh.kumar4work@gmail.com
+- **Issues**: [GitHub Issues](https://github.com/daemon-001/zipline/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/daemon-001/zipline/discussions)
+- **Documentation**: [Wiki](https://github.com/daemon-001/zipline/wiki)
 
-## Changelog
-
-### Version 1.0.0
-- Initial release
-- File and folder transfer support
-- Network discovery
-- Real-time progress tracking
-- Transfer history
-- Cross-platform support
 
 ---
 
-**Zipline** - Fast file transfer for LAN users © 2025
+**Zipline** - Fast file transfer for LAN users
