@@ -1,8 +1,12 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../models/peer.dart';
+import '../models/transfer_item.dart';
+import '../models/transfer_session.dart';
 import '../services/file_transfer_service.dart';
 
 class SendPage extends StatefulWidget {
@@ -287,12 +291,42 @@ class _SendPageState extends State<SendPage> {
     final fileTransfer = Provider.of<FileTransferService>(context, listen: false);
     
     try {
-      final sessionId = await fileTransfer.sendFiles(
-        peer: widget.peer,
-        filePaths: filePaths,
-      );
+      // Convert file paths to TransferItems
+      final List<TransferItem> items = [];
       
-      if (sessionId != null) {
+      for (final path in filePaths) {
+        // Use FileStat to safely handle files and directories
+        final stat = await FileStat.stat(path);
+        final name = path.split('\\').last;
+        
+        if (stat.type == FileSystemEntityType.directory) {
+          // Directory item with size -1
+          items.add(TransferItem(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            type: TransferType.folder,
+            name: name,
+            path: path,
+            createdAt: DateTime.now(),
+            size: -1, // Directories have size -1
+            status: TransferStatus.pending,
+          ));
+        } else {
+          // File item with actual size
+          items.add(TransferItem(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            type: TransferType.file,
+            name: name,
+            path: path,
+            createdAt: DateTime.now(),
+            size: stat.size, // Use FileStat.size instead of File().lengthSync()
+            status: TransferStatus.pending,
+          ));
+        }
+      }
+      
+      final success = await fileTransfer.sendFiles(widget.peer, items);
+      
+      if (success) {
         if (mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
@@ -320,12 +354,9 @@ class _SendPageState extends State<SendPage> {
     final fileTransfer = Provider.of<FileTransferService>(context, listen: false);
     
     try {
-      final sessionId = await fileTransfer.sendText(
-        peer: widget.peer,
-        text: text,
-      );
+      final success = await fileTransfer.sendText(widget.peer, text);
       
-      if (sessionId != null) {
+      if (success) {
         if (mounted) {
           Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(

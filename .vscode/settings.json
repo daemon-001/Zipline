@@ -1,0 +1,19 @@
+{
+    "files.associations": {
+        "chrono": "cpp",
+        "system_error": "cpp",
+        "xlocale": "cpp",
+        "list": "cpp",
+        "array": "cpp",
+        "format": "cpp",
+        "initializer_list": "cpp",
+        "span": "cpp",
+        "utility": "cpp",
+        "vector": "cpp",
+        "xhash": "cpp",
+        "xstring": "cpp",
+        "xtree": "cpp",
+        "xutility": "cpp",
+        "variant": "cpp"
+    }
+}

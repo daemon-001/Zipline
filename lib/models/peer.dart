@@ -4,6 +4,7 @@ import 'package:json_annotation/json_annotation.dart';
 
 @JsonSerializable()
 class Peer {
+  final String id;
   final String address;
   final String name;
   final int port;
@@ -13,9 +14,11 @@ class Peer {
   final String? osLogo;
   final String? adapterName;
   final String? connectionType;
+  final String? signature; // For protocol compatibility
   final DateTime lastSeen;
 
   Peer({
+    required this.id,
     required this.address,
     required this.name,
     required this.port,
@@ -25,13 +28,16 @@ class Peer {
     this.osLogo,
     this.adapterName,
     this.connectionType,
-  }) : lastSeen = DateTime.now();
+    this.signature,
+    DateTime? lastSeen,
+  }) : lastSeen = lastSeen ?? DateTime.now();
 
   // factory Peer.fromJson(Map<String, dynamic> json) => _$PeerFromJson(json);
   // Map<String, dynamic> toJson() => _$PeerToJson(this);
 
   factory Peer.fromJson(Map<String, dynamic> json) {
     return Peer(
+      id: json['id'] as String,
       address: json['address'] as String,
       name: json['name'] as String,
       port: json['port'] as int,
@@ -41,11 +47,14 @@ class Peer {
       osLogo: json['osLogo'] as String?,
       adapterName: json['adapterName'] as String?,
       connectionType: json['connectionType'] as String?,
+      signature: json['signature'] as String?,
+      lastSeen: DateTime.parse(json['lastSeen'] as String),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'address': address,
       'name': name,
       'port': port,
@@ -55,11 +64,13 @@ class Peer {
       'osLogo': osLogo,
       'adapterName': adapterName,
       'connectionType': connectionType,
+      'signature': signature,
       'lastSeen': lastSeen.toIso8601String(),
     };
   }
 
   Peer copyWith({
+    String? id,
     String? address,
     String? name,
     int? port,
@@ -69,8 +80,11 @@ class Peer {
     String? osLogo,
     String? adapterName,
     String? connectionType,
+    String? signature,
+    DateTime? lastSeen,
   }) {
     return Peer(
+      id: id ?? this.id,
       address: address ?? this.address,
       name: name ?? this.name,
       port: port ?? this.port,
@@ -80,6 +94,8 @@ class Peer {
       osLogo: osLogo ?? this.osLogo,
       adapterName: adapterName ?? this.adapterName,
       connectionType: connectionType ?? this.connectionType,
+      signature: signature ?? this.signature,
+      lastSeen: lastSeen ?? this.lastSeen,
     );
   }
 
@@ -89,17 +105,17 @@ class Peer {
     final platformLower = platform?.toLowerCase() ?? '';
     switch (platformLower) {
       case 'windows':
-        return 'assets/images/WindowsLogo.png';
+        return '🪟';
       case 'linux':
-        return 'assets/images/LinuxLogo.png';
+        return '🐧';
       case 'apple':
       case 'macos':
       case 'ios':
-        return 'assets/images/AppleLogo.png';
+        return '🍎';
       case 'android':
-        return 'assets/images/AndroidLogo.png';
+        return '🤖';
       default:
-        return 'assets/images/PcLogo.png';
+        return '💻';
     }
   }
 

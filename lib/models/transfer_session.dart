@@ -4,7 +4,8 @@ import 'transfer_item.dart';
 
 // part 'transfer_session.g.dart';
 
-enum TransferDirection { sending, receiving }
+enum TransferDirection { sending, receiving, outgoing, incoming }
+enum TransferStatus { pending, inProgress, completed, failed, cancelled }
 
 @JsonSerializable()
 class TransferSession {
@@ -167,11 +168,16 @@ class TransferSession {
   String get directionText {
     switch (direction) {
       case TransferDirection.sending:
+      case TransferDirection.outgoing: // Handle both enum values
         return 'Sending to ${peer.displayName}';
       case TransferDirection.receiving:
+      case TransferDirection.incoming: // Handle both enum values
         return 'Receiving from ${peer.displayName}';
     }
   }
+
+  // Compatibility getter for old code that uses createdAt
+  DateTime get createdAt => startedAt;
 
   bool get isCompleted => status == TransferStatus.completed;
   bool get isFailed => status == TransferStatus.failed;

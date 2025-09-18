@@ -175,14 +175,15 @@ class _BuddiesPageState extends State<BuddiesPage> {
       
       setState(() {
         _localPeer = Peer(
+          id: '$primaryAddress:6442',
           address: primaryAddress,
           name: '$userName at $hostName',
-          port: 7250,
+          port: 6442,
           platform: 'Windows',
         );
         
         // Build connection info string
-        final port = peerDiscovery.listenPort ?? 7250;
+        final port = peerDiscovery.listenPort ?? 6442;
         final interfaceName = primaryInterface?.name ?? 'Unknown';
         
         // Count all active NON-VIRTUAL adapters
@@ -273,7 +274,7 @@ class _BuddiesPageState extends State<BuddiesPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildDetailRow('Listen Port', '${peerDiscovery.listenPort ?? 7250}'),
+              _buildDetailRow('Listen Port', '${peerDiscovery.listenPort ?? 6442}'),
               const SizedBox(height: 12),
               _buildDetailRow('Protocol', 'UDP/TCP'),
               const SizedBox(height: 12),

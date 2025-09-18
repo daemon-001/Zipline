@@ -96,7 +96,7 @@ class AboutPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 12),
                       _buildInfoRow('Name', appState.settings?.buddyName ?? 'Unknown'),
-                      _buildInfoRow('Port', appState.settings?.port.toString() ?? '7250'),
+                      _buildInfoRow('Port', appState.settings?.port.toString() ?? '6442'),
                       _buildInfoRow('Platform', 'Windows'),
                       _buildInfoRow('Destination', 
                           (appState.settings?.destPath ?? '').isEmpty

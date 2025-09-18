@@ -18,13 +18,16 @@ class AppSettings {
     required this.buddyName,
     this.buddyAvatar = '',
     required this.destPath,
-    this.port = 7250,
+    this.port = 6442,
     this.showNotifications = true,
     this.startMinimized = false,
     this.showTermsOnStart = true,
     this.themeColor = '#3498db',
     this.autoStartOnBoot = false,
   });
+
+  // Getter for compatibility with optimized services
+  String get downloadDirectory => destPath;
 
   // factory AppSettings.fromJson(Map<String, dynamic> json) => _$AppSettingsFromJson(json);
   // Map<String, dynamic> toJson() => _$AppSettingsToJson(this);
@@ -34,7 +37,7 @@ class AppSettings {
       buddyName: json['buddyName'] as String,
       buddyAvatar: json['buddyAvatar'] as String? ?? '',
       destPath: json['destPath'] as String,
-      port: json['port'] as int? ?? 7250,
+      port: json['port'] as int? ?? 6442,
       showNotifications: json['showNotifications'] as bool? ?? true,
       startMinimized: json['startMinimized'] as bool? ?? false,
       showTermsOnStart: json['showTermsOnStart'] as bool? ?? true,
@@ -117,5 +120,5 @@ class AppSettings {
 AppSettings get defaultSettings => AppSettings(
       buddyName: 'User',
       destPath: '', // Will be set to Downloads/Zipline by the app
-      port: 7250,
+      port: 6442,
     );

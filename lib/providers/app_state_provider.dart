@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/app_settings.dart';
+import '../utils/system_info.dart';
 
 class AppStateProvider extends ChangeNotifier {
   AppSettings? _settings;
@@ -33,9 +34,9 @@ class AppStateProvider extends ChangeNotifier {
           ? '${Platform.environment['USERPROFILE']}\\Downloads\\Zipline' 
           : '${Platform.environment['HOME']}/Downloads/Zipline';
       
-      // Load default settings
+      // Load default settings with proper system info
       _settings = AppSettings(
-        buddyName: 'Zipline User',
+        buddyName: SystemInfo.getSystemSignature(),
         destPath: downloadsPath,
       );
       _isInitialized = true;

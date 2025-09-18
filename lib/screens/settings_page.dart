@@ -7,6 +7,7 @@ import '../providers/app_state_provider.dart';
 import '../services/file_transfer_service.dart';
 import '../main.dart';
 import '../models/app_settings.dart';
+import '../utils/system_info.dart';
 
 class SettingsPage extends StatefulWidget {
   final VoidCallback onBack;
@@ -23,13 +24,14 @@ class _SettingsPageState extends State<SettingsPage> {
   late TextEditingController _pathController;
   bool _showNotifications = true;
   bool _startMinimized = false;
+  String? _diagnosticsResult;
 
   @override
   void initState() {
     super.initState();
     final settings = Provider.of<AppStateProvider>(context, listen: false).settings;
-    _nameController = TextEditingController(text: settings?.buddyName ?? 'Zipline User');
-    _portController = TextEditingController(text: settings?.port.toString() ?? '7250');
+    _nameController = TextEditingController(text: settings?.buddyName ?? SystemInfo.getSystemSignature());
+    _portController = TextEditingController(text: settings?.port.toString() ?? '6442');
     _pathController = TextEditingController(text: settings?.destPath ?? '');
     _showNotifications = settings?.showNotifications ?? true;
     _startMinimized = settings?.startMinimized ?? false;
@@ -177,6 +179,53 @@ class _SettingsPageState extends State<SettingsPage> {
                   [
                     _buildHistoryTile(),
                   ],
+                ),
+                
+                const SizedBox(height: 32),
+                
+                // Network Diagnostics section
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[300]!),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Network Diagnostics',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: _runNetworkDiagnostics,
+                        child: const Text('Run Network Test'),
+                      ),
+                      if (_diagnosticsResult != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.grey[300]!),
+                          ),
+                          child: Text(
+                            _diagnosticsResult!,
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
                 
                 const SizedBox(height: 32),
@@ -329,8 +378,8 @@ class _SettingsPageState extends State<SettingsPage> {
       return;
     }
     
-    final currentSettings = appState.settings ?? const AppSettings(
-      buddyName: 'Zipline User',
+    final currentSettings = appState.settings ?? AppSettings(
+      buddyName: SystemInfo.getSystemSignature(),
       destPath: '',
     );
     
@@ -402,5 +451,44 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _runNetworkDiagnostics() async {
+    setState(() {
+      _diagnosticsResult = 'Running diagnostics...';
+    });
+
+    try {
+      final fileTransfer = Provider.of<FileTransferService>(context, listen: false);
+      final diagnostics = await fileTransfer.getNetworkDiagnostics();
+      
+      final buffer = StringBuffer();
+      buffer.writeln('=== Network Diagnostics ===');
+      
+      diagnostics.forEach((key, value) {
+        if (key == 'local_ips' && value is List) {
+          buffer.writeln('Local IP Addresses:');
+          for (final ip in value) {
+            buffer.writeln('  • $ip');
+          }
+        } else {
+          buffer.writeln('$key: $value');
+        }
+      });
+      
+      buffer.writeln('\n=== Troubleshooting Tips ===');
+      buffer.writeln('• Make sure Windows Firewall allows Zipline on port ${_portController.text}');
+      buffer.writeln('• Ensure both devices are on the same network');
+      buffer.writeln('• Try disabling antivirus temporarily if transfers fail');
+      buffer.writeln('• Check if target device has Zipline running');
+      
+      setState(() {
+        _diagnosticsResult = buffer.toString();
+      });
+    } catch (e) {
+      setState(() {
+        _diagnosticsResult = 'Error running diagnostics: $e';
+      });
+    }
   }
 }

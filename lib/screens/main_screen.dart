@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import '../providers/app_state_provider.dart';
 import '../services/peer_discovery_service.dart';
 import '../services/file_transfer_service.dart';
+import '../services/progress_dialog_manager.dart';
+import '../services/network_utility.dart';
+import '../widgets/network_warning_dialog.dart';
 import '../main.dart';
 import '../widgets/tab_bar_widget.dart';
 import '../widgets/tool_bar_widget.dart';
@@ -22,7 +25,6 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentPageIndex = 0;
-  bool _showProgress = false;
   bool _showSettings = false;
   bool _showIpPage = false;
 
@@ -30,6 +32,13 @@ class _MainScreenState extends State<MainScreen> {
   void initState() {
     super.initState();
     _initializeServices();
+  }
+
+  @override
+  void dispose() {
+    // Hide any active progress dialogs
+    ProgressDialogManager.instance.hideProgress();
+    super.dispose();
   }
 
   Future<void> _initializeServices() async {
@@ -48,6 +57,44 @@ class _MainScreenState extends State<MainScreen> {
       
       final settings = appState.settings!;
       
+      // Check port availability before starting services
+      if (mounted) {
+        final portCheck = await fileTransfer.checkPortAvailability(settings.port);
+        
+        if (!portCheck['available']) {
+          final result = await NetworkWarningDialog.showPortConflictDialog(
+            context: context,
+            port: settings.port,
+            conflictingApp: portCheck['conflictingApp'],
+          );
+          
+          if (result == 'change_port') {
+            // Navigate to settings to change port
+            Navigator.of(context).push(
+              MaterialPageRoute(builder: (context) => SettingsPage(onBack: () => Navigator.of(context).pop())),
+            );
+            return;
+          } else if (result != 'retry') {
+            // User cancelled or chose not to continue
+            return;
+          }
+          // If retry, continue with initialization
+        }
+      }
+      
+      // Check network interfaces and show info if multiple
+      final networkInterfaces = await NetworkUtility.getNetworkInterfaces();
+      if (mounted && networkInterfaces.length > 1) {
+        final interfaceList = networkInterfaces
+            .map((interface) => '${interface.type} (${interface.name}): ${interface.address}')
+            .toList();
+        
+        await NetworkWarningDialog.showNetworkInterfaceDialog(
+          context: context,
+          interfaces: interfaceList,
+        );
+      }
+      
       // Start peer discovery service
       final discoveryStarted = await peerDiscovery.start(
         port: settings.port,
@@ -62,12 +109,24 @@ class _MainScreenState extends State<MainScreen> {
       // Update file transfer service with settings
       fileTransfer.updateSettings(settings);
       
+      // Connect peer discovery to file transfer service
+      fileTransfer.setPeerDiscovery(peerDiscovery);
+      
       // Initialize file transfer service (clean up old history)
       fileTransfer.initialize();
       
       // Start file transfer server
-      final transferStarted = await fileTransfer.startServer(settings.port);
+      final transferStarted = await fileTransfer.startServer(port: settings.port);
       if (!transferStarted) {
+        // Show error dialog if server failed to start after port check passed
+        if (mounted) {
+          await NetworkWarningDialog.showNetworkErrorDialog(
+            context: context,
+            error: 'Failed to start file transfer server on port ${settings.port}',
+            suggestion: 'The port may have been taken by another application since the initial check. Try restarting the app or changing the port in settings.',
+            canRetry: true,
+          );
+        }
         throw Exception('Failed to start file transfer server');
       }
 
@@ -75,29 +134,51 @@ class _MainScreenState extends State<MainScreen> {
 
       // Listen to transfer events
       fileTransfer.onSessionStarted.listen((session) {
-        setState(() {
-          _showProgress = true;
-        });
+        // Show popup progress dialog instead of switching pages
+        if (mounted) {
+          ProgressDialogManager.instance.showProgress(
+            context, 
+            session,
+            onCancel: () {
+              fileTransfer.cancelTransfer(session.id);
+            },
+          );
+        }
+      });
+
+      fileTransfer.onSessionProgress.listen((session) {
+        // Update progress dialog
+        if (mounted) {
+          ProgressDialogManager.instance.updateProgress(session);
+        }
       });
 
       fileTransfer.onSessionCompleted.listen((session) {
-        setState(() {
-          _showProgress = false;
-          _currentPageIndex = 1; // Switch to recent page
-        });
+        // Hide progress dialog after showing completion briefly
+        if (mounted) {
+          ProgressDialogManager.instance.updateProgress(session);
+          ProgressDialogManager.instance.hideProgressWithDelay();
+          
+          // Switch to recent page to show completed transfer
+          setState(() {
+            _currentPageIndex = 1;
+          });
+        }
       });
 
       fileTransfer.onSessionFailed.listen((session) {
-        setState(() {
-          _showProgress = false;
-        });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Transfer failed: ${session.error}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        // Hide progress dialog and show error
+        if (mounted) {
+          ProgressDialogManager.instance.hideProgress();
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Transfer failed: ${session.error ?? 'Unknown error'}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
       });
 
     } catch (e) {
@@ -108,7 +189,6 @@ class _MainScreenState extends State<MainScreen> {
   void _onTabChanged(int index) {
     setState(() {
       _currentPageIndex = index;
-      _showProgress = false;
       _showSettings = false;
       _showIpPage = false;
     });
@@ -130,15 +210,10 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       _showSettings = false;
       _showIpPage = false;
-      _showProgress = false;
     });
   }
 
   Widget _buildCurrentPage() {
-    if (_showProgress) {
-      return const ProgressPage();
-    }
-    
     if (_showSettings) {
       return SettingsPage(onBack: _onBackPressed);
     }
@@ -214,7 +289,7 @@ class _MainScreenState extends State<MainScreen> {
 
           return Column(
             children: [
-              if (!_showProgress && !_showSettings && !_showIpPage)
+              if (!_showSettings && !_showIpPage)
                 ZiplineTabBar(
                   currentIndex: _currentPageIndex,
                   onTabChanged: _onTabChanged,
@@ -222,7 +297,7 @@ class _MainScreenState extends State<MainScreen> {
               Expanded(
                 child: _buildCurrentPage(),
               ),
-              if (!_showProgress && !_showSettings && !_showIpPage)
+              if (!_showSettings && !_showIpPage)
                 ZiplineToolBar(
                   onIpPressed: _showIpList,
                   onSettingsPressed: _showSettingsPage,

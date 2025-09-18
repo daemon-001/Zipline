@@ -16,9 +16,6 @@ Zipline is a modern, cross-platform file transfer application built with Flutter
 - **Transfer History**: Keep track of all your file transfers
 - **Customizable**: Configurable download directory and network settings
 
-## Screenshots
-
-*Screenshots coming soon...*
 
 ## Requirements
 

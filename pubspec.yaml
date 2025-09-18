@@ -49,20 +49,3 @@ flutter:
   # included with your application, so that you can use the icons in
   uses-material-design: true
   
-  assets:
-    - assets/images/
-    - assets/fonts/
-
-  fonts:
-    - family: Klill
-      fonts:
-        - asset: assets/fonts/Klill-Light.ttf
-          weight: 300
-    - family: LiberationSans
-      fonts:
-        - asset: assets/fonts/LiberationSans-Regular.ttf
-          weight: 400
-    - family: KGLikeASkyscraper
-      fonts:
-        - asset: assets/fonts/KGLikeASkyscraper.ttf
-          weight: 400

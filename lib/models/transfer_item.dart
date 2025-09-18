@@ -1,10 +1,9 @@
 import 'package:json_annotation/json_annotation.dart';
+import 'transfer_session.dart';
 
 // part 'transfer_item.g.dart';
 
 enum TransferType { file, folder, text }
-
-enum TransferStatus { pending, inProgress, completed, failed, cancelled }
 
 @JsonSerializable()
 class TransferItem {
@@ -115,12 +114,12 @@ class TransferItem {
   String get iconPath {
     switch (type) {
       case TransferType.folder:
-        return 'assets/images/OpenFolderIcon.png';
+        return '📁';
       case TransferType.text:
-        return 'assets/images/RecentText.png';
+        return '📄';
       case TransferType.file:
       default:
-        return 'assets/images/RecentFile.png';
+        return '📄';
     }
   }
 
