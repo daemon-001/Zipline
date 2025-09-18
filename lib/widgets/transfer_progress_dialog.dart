@@ -56,9 +56,6 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
     if (widget.session != oldWidget.session) {
       final progress = _getOverallProgress();
       _progressController.animateTo(progress);
-      
-      // Debug print to see if updates are working
-      print('Progress updated: ${(progress * 100).toStringAsFixed(1)}% - Status: ${widget.session.status}');
     }
   }
 

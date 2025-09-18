@@ -1,18 +1,20 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/app_state_provider.dart';
+import '../models/peer.dart';
+import '../models/app_settings.dart';
 import '../services/peer_discovery_service.dart';
 import '../services/file_transfer_service.dart';
 import '../services/progress_dialog_manager.dart';
 import '../services/network_utility.dart';
 import '../widgets/network_warning_dialog.dart';
-import '../main.dart';
 import '../widgets/tab_bar_widget.dart';
-import '../widgets/tool_bar_widget.dart';
+import '../widgets/user_profile_bar.dart';
 import 'buddies_page.dart';
 import 'recent_page.dart';
 import 'about_page.dart';
-import 'progress_page.dart';
 import 'settings_page.dart';
 import 'ip_page.dart';
 
@@ -27,6 +29,7 @@ class _MainScreenState extends State<MainScreen> {
   int _currentPageIndex = 0;
   bool _showSettings = false;
   bool _showIpPage = false;
+  Peer? _localPeer;
 
   @override
   void initState() {
@@ -105,6 +108,9 @@ class _MainScreenState extends State<MainScreen> {
       if (!discoveryStarted) {
         throw Exception('Failed to start peer discovery');
       }
+      
+      // BUGFIX: Start network monitoring to detect interface changes
+      _startNetworkMonitoring(peerDiscovery);
 
       // Update file transfer service with settings
       fileTransfer.updateSettings(settings);
@@ -132,6 +138,9 @@ class _MainScreenState extends State<MainScreen> {
 
       appState.setInitialized(true);
 
+      // Create local peer for profile bar
+      _createLocalPeer(settings);
+
       // Listen to transfer events
       fileTransfer.onSessionStarted.listen((session) {
         // Show popup progress dialog instead of switching pages
@@ -158,11 +167,6 @@ class _MainScreenState extends State<MainScreen> {
         if (mounted) {
           ProgressDialogManager.instance.updateProgress(session);
           ProgressDialogManager.instance.hideProgressWithDelay();
-          
-          // Switch to recent page to show completed transfer
-          setState(() {
-            _currentPageIndex = 1;
-          });
         }
       });
 
@@ -182,7 +186,12 @@ class _MainScreenState extends State<MainScreen> {
       });
 
     } catch (e) {
-      appState.setError(e.toString());
+      // Try to continue with basic initialization even if some services fail
+      try {
+        appState.setInitialized(true);
+      } catch (e2) {
+        appState.setError('Failed to initialize: ${e.toString()}');
+      }
     }
   }
 
@@ -236,51 +245,81 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: theme.colorScheme.surface,
       body: Consumer<AppStateProvider>(
         builder: (context, appState, child) {
           if (!appState.isInitialized) {
             if (appState.errorMessage != null) {
               return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.error_outline,
-                      size: 64,
-                      color: Colors.red,
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Initialization Error',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: Colors.red[600],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      appState.errorMessage!,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _initializeServices,
-                      child: const Text('Retry'),
-                    ),
-                  ],
+                      const SizedBox(height: 24),
+                      Text(
+                        'Initialization Error',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: theme.colorScheme.onSurface,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        appState.errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: Colors.red[600],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      FilledButton.icon(
+                        onPressed: _initializeServices,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Retry'),
+                      ),
+                    ],
+                  ),
                 ),
               );
             } else {
-              return const Center(
+              return Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 16),
-                    Text('Initializing Zipline...'),
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: CircularProgressIndicator(
+                        color: theme.colorScheme.primary,
+                        strokeWidth: 3,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Initializing Zipline...',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
                   ],
                 ),
               );
@@ -289,23 +328,73 @@ class _MainScreenState extends State<MainScreen> {
 
           return Column(
             children: [
+              // User profile bar
+              if (!_showSettings && !_showIpPage)
+                UserProfileBar(
+                  localPeer: _localPeer,
+                  onSettingsPressed: _showSettingsPage,
+                  onIpAddressesPressed: _showIpList,
+                ),
               if (!_showSettings && !_showIpPage)
                 ZiplineTabBar(
                   currentIndex: _currentPageIndex,
                   onTabChanged: _onTabChanged,
                 ),
               Expanded(
-                child: _buildCurrentPage(),
-              ),
-              if (!_showSettings && !_showIpPage)
-                ZiplineToolBar(
-                  onIpPressed: _showIpList,
-                  onSettingsPressed: _showSettingsPage,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        theme.colorScheme.surface,
+                        theme.colorScheme.surface.withValues(alpha: 0.8),
+                      ],
+                    ),
+                  ),
+                  child: _buildCurrentPage(),
                 ),
+              ),
             ],
           );
         },
       ),
+    );
+  }
+
+  // BUGFIX: Monitor network interfaces for changes
+  void _startNetworkMonitoring(PeerDiscoveryService peerDiscovery) {
+    Timer.periodic(const Duration(seconds: 30), (timer) async {
+      try {
+        // Check if network interfaces have changed
+        final currentInterfaces = await NetworkInterface.list(
+          includeLoopback: false,
+          includeLinkLocal: true,
+        );
+        
+        // Simple heuristic: if interface count changed significantly, refresh peers
+        if (currentInterfaces.length != _lastInterfaceCount) {
+          _lastInterfaceCount = currentInterfaces.length;
+          // Refresh neighbors to discover new peers
+          await peerDiscovery.refreshNeighbors();
+        }
+      } catch (e) {
+        // Silently handle network monitoring errors
+      }
+    });
+  }
+
+  int _lastInterfaceCount = 0;
+
+  void _createLocalPeer(AppSettings settings) {
+    _localPeer = Peer(
+      id: 'local',
+      name: settings.buddyName,
+      address: '127.0.0.1', // Will be updated with actual IP
+      port: settings.port,
+      platform: 'Windows',
+      system: 'Local',
+      lastSeen: DateTime.now(),
     );
   }
 }

@@ -123,7 +123,6 @@ class BuddyMessage {
         connectionType: connectionType,
       );
     } catch (e) {
-      print('Error parsing BuddyMessage: $e');
       return const BuddyMessage(type: MessageType.invalid, port: 0, signature: '');
     }
   }

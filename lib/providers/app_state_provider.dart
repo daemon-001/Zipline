@@ -27,14 +27,33 @@ class AppStateProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateTheme(AppTheme theme) {
+    if (_settings != null) {
+      _settings = _settings!.copyWith(theme: theme);
+      notifyListeners();
+    }
+  }
+
   void initializeSettings() async {
     try {
-      // Set default download path to Downloads/Zipline
-      final downloadsPath = Platform.isWindows 
-          ? '${Platform.environment['USERPROFILE']}\\Downloads\\Zipline' 
-          : '${Platform.environment['HOME']}/Downloads/Zipline';
+      // Set default download path to Downloads/Zipline with fallbacks
+      String downloadsPath;
+      if (Platform.isWindows) {
+        downloadsPath = Platform.environment['USERPROFILE'] ?? 
+                       'C:\\Users\\User\\Downloads\\Zipline';
+        if (!downloadsPath.endsWith('\\Zipline')) {
+          downloadsPath = '$downloadsPath\\Zipline';
+        }
+      } else {
+        downloadsPath = Platform.environment['HOME'] ?? 
+                       Platform.environment['USERPROFILE'] ?? 
+                       '/home/user/Downloads/Zipline';
+        if (!downloadsPath.endsWith('/Zipline')) {
+          downloadsPath = '$downloadsPath/Zipline';
+        }
+      }
       
-      // Load default settings with proper system info
+      // Load default settings with proper system info and fallbacks
       _settings = AppSettings(
         buddyName: SystemInfo.getSystemSignature(),
         destPath: downloadsPath,
@@ -42,7 +61,12 @@ class AppStateProvider extends ChangeNotifier {
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
-      _errorMessage = 'Failed to initialize settings: $e';
+      // Provide fallback settings instead of failing
+      _settings = AppSettings(
+        buddyName: 'User at Computer',
+        destPath: Platform.isWindows ? 'C:\\Downloads\\Zipline' : '/home/user/Downloads/Zipline',
+      );
+      _isInitialized = true;
       notifyListeners();
     }
   }

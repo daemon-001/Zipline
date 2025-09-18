@@ -5,7 +5,6 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import '../providers/app_state_provider.dart';
 import '../services/file_transfer_service.dart';
-import '../main.dart';
 import '../models/app_settings.dart';
 import '../utils/system_info.dart';
 
@@ -24,6 +23,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late TextEditingController _pathController;
   bool _showNotifications = true;
   bool _startMinimized = false;
+  AppTheme _selectedTheme = AppTheme.system;
   String? _diagnosticsResult;
 
   @override
@@ -35,6 +35,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _pathController = TextEditingController(text: settings?.destPath ?? '');
     _showNotifications = settings?.showNotifications ?? true;
     _startMinimized = settings?.startMinimized ?? false;
+    _selectedTheme = settings?.theme ?? AppTheme.system;
     
     _initializeDefaultPath();
   }
@@ -156,6 +157,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 _buildSection(
                   'App Settings',
                   [
+                    _buildThemeSelector(),
                     _buildSwitchTile(
                       'Show Notifications',
                       'Display notifications for transfers',
@@ -309,6 +311,56 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  Widget _buildThemeSelector() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Theme',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<AppTheme>(
+            value: _selectedTheme,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            items: AppTheme.values.map((AppTheme theme) {
+              return DropdownMenuItem<AppTheme>(
+                value: theme,
+                child: Text(_getThemeDisplayName(theme)),
+              );
+            }).toList(),
+            onChanged: (AppTheme? newTheme) {
+              if (newTheme != null) {
+                setState(() {
+                  _selectedTheme = newTheme;
+                });
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getThemeDisplayName(AppTheme theme) {
+    switch (theme) {
+      case AppTheme.light:
+        return 'Light Mode';
+      case AppTheme.dark:
+        return 'Dark Mode';
+      case AppTheme.system:
+        return 'System Default';
+    }
+  }
+
   Widget _buildSwitchTile(
     String title,
     String subtitle,
@@ -389,6 +441,7 @@ class _SettingsPageState extends State<SettingsPage> {
       destPath: _pathController.text.trim(),
       showNotifications: _showNotifications,
       startMinimized: _startMinimized,
+      theme: _selectedTheme,
     );
     
     appState.updateSettings(newSettings);

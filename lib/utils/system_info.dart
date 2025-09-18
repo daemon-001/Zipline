@@ -63,9 +63,9 @@ class SystemInfo {
     return _cachedPlatform!;
   }
 
-  /// Generate the system signature: "Username at Hostname (Platform)"
+  /// Generate the system signature: "Hostname (Platform)"
   static String getSystemSignature() {
-    return '${getSystemUsername()} at ${getSystemHostname()} (${getPlatformName()})';
+    return '${getSystemHostname()} (${getPlatformName()})';
   }
 
   /// Get the username with buddy name override

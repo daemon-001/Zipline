@@ -1,6 +1,13 @@
 import 'package:json_annotation/json_annotation.dart';
+import 'package:flutter/material.dart';
 
 // part 'app_settings.g.dart';
+
+enum AppTheme {
+  light,
+  dark,
+  system,
+}
 
 @JsonSerializable()
 class AppSettings {
@@ -12,6 +19,7 @@ class AppSettings {
   final bool startMinimized;
   final bool showTermsOnStart;
   final String themeColor;
+  final AppTheme theme;
   final bool autoStartOnBoot;
 
   const AppSettings({
@@ -23,11 +31,24 @@ class AppSettings {
     this.startMinimized = false,
     this.showTermsOnStart = true,
     this.themeColor = '#3498db',
+    this.theme = AppTheme.system,
     this.autoStartOnBoot = false,
   });
 
   // Getter for compatibility with optimized services
   String get downloadDirectory => destPath;
+
+  // Get the actual brightness based on theme setting
+  Brightness get brightness {
+    switch (theme) {
+      case AppTheme.light:
+        return Brightness.light;
+      case AppTheme.dark:
+        return Brightness.dark;
+      case AppTheme.system:
+        return WidgetsBinding.instance.platformDispatcher.platformBrightness;
+    }
+  }
 
   // factory AppSettings.fromJson(Map<String, dynamic> json) => _$AppSettingsFromJson(json);
   // Map<String, dynamic> toJson() => _$AppSettingsToJson(this);
@@ -42,6 +63,10 @@ class AppSettings {
       startMinimized: json['startMinimized'] as bool? ?? false,
       showTermsOnStart: json['showTermsOnStart'] as bool? ?? true,
       themeColor: json['themeColor'] as String? ?? '#3498db',
+      theme: AppTheme.values.firstWhere(
+        (e) => e.name == json['theme'],
+        orElse: () => AppTheme.system,
+      ),
       autoStartOnBoot: json['autoStartOnBoot'] as bool? ?? false,
     );
   }
@@ -56,6 +81,7 @@ class AppSettings {
       'startMinimized': startMinimized,
       'showTermsOnStart': showTermsOnStart,
       'themeColor': themeColor,
+      'theme': theme.name,
       'autoStartOnBoot': autoStartOnBoot,
     };
   }
@@ -69,6 +95,7 @@ class AppSettings {
     bool? startMinimized,
     bool? showTermsOnStart,
     String? themeColor,
+    AppTheme? theme,
     bool? autoStartOnBoot,
   }) {
     return AppSettings(
@@ -80,6 +107,7 @@ class AppSettings {
       startMinimized: startMinimized ?? this.startMinimized,
       showTermsOnStart: showTermsOnStart ?? this.showTermsOnStart,
       themeColor: themeColor ?? this.themeColor,
+      theme: theme ?? this.theme,
       autoStartOnBoot: autoStartOnBoot ?? this.autoStartOnBoot,
     );
   }
@@ -97,6 +125,7 @@ class AppSettings {
           startMinimized == other.startMinimized &&
           showTermsOnStart == other.showTermsOnStart &&
           themeColor == other.themeColor &&
+          theme == other.theme &&
           autoStartOnBoot == other.autoStartOnBoot;
 
   @override
@@ -109,6 +138,7 @@ class AppSettings {
         startMinimized,
         showTermsOnStart,
         themeColor,
+        theme,
         autoStartOnBoot,
       );
 

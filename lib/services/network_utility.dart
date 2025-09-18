@@ -78,7 +78,7 @@ class NetworkUtility {
         }
       }
     } catch (e) {
-      print('Error checking port usage: $e');
+      // Silently handle port usage check errors
     }
     return null;
   }
@@ -107,7 +107,7 @@ class NetworkUtility {
         }
       }
     } catch (e) {
-      print('Error getting network interfaces: $e');
+      // Silently handle network interface errors
     }
 
     return interfaces;
@@ -137,29 +137,45 @@ class NetworkUtility {
   static String _getInterfaceType(String name) {
     final lowerName = name.toLowerCase();
     
+    // WiFi patterns (check these first as they're more specific)
     if (lowerName.contains('wi-fi') || 
         lowerName.contains('wifi') || 
         lowerName.contains('wireless') ||
-        lowerName.contains('wlan')) {
+        lowerName.contains('wlan') ||
+        lowerName.contains('802.11') ||
+        lowerName.contains('airport') ||
+        lowerName.contains('wifi adapter')) {
       return 'WiFi';
-    } else if (lowerName.contains('ethernet') || 
-               lowerName.contains('eth') ||
-               lowerName.contains('local area connection')) {
+    } 
+    // Ethernet patterns
+    else if (lowerName.contains('ethernet') || 
+             lowerName.contains('eth') ||
+             lowerName.contains('local area connection') ||
+             lowerName.contains('lan') ||
+             lowerName.contains('gigabit') ||
+             lowerName.contains('fast ethernet') ||
+             lowerName.contains('realtek') ||
+             lowerName.contains('intel ethernet')) {
       return 'Ethernet';
-    } else if (lowerName.contains('bluetooth') || 
-               lowerName.contains('bt')) {
+    } 
+    // Other connection types
+    else if (lowerName.contains('bluetooth') || 
+             lowerName.contains('bt')) {
       return 'Bluetooth';
     } else if (lowerName.contains('vmware') || 
                lowerName.contains('virtualbox') ||
                lowerName.contains('hyper-v') ||
-               lowerName.contains('vbox')) {
+               lowerName.contains('vbox') ||
+               lowerName.contains('virtual')) {
       return 'Virtual';
     } else if (lowerName.contains('mobile') || 
                lowerName.contains('cellular') ||
-               lowerName.contains('usb')) {
+               lowerName.contains('usb') ||
+               lowerName.contains('modem')) {
       return 'Mobile';
     } else {
-      return 'Unknown';
+      // If we can't determine, be conservative and return Network
+      return 'Network';
     }
   }
 
@@ -184,5 +200,110 @@ class NetworkUtility {
   static Future<String?> getBestIPAddress() async {
     final primary = await getPrimaryInterface();
     return primary?.address;
+  }
+
+  /// Detect connection type (WiFi/Ethernet) based on IP address
+  static Future<String> detectConnectionTypeFromIP(String ipAddress) async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        includeLinkLocal: true,
+      );
+
+      // First, try to find the exact interface that has this IP
+      for (final interface in interfaces) {
+        for (final address in interface.addresses) {
+          if (address.type == InternetAddressType.IPv4 && address.address == ipAddress) {
+            final detectedType = _getInterfaceType(interface.name);
+            return detectedType;
+          }
+        }
+      }
+      
+      // If not found in local interfaces, check if it's in the same subnet as any local interface
+      for (final interface in interfaces) {
+        for (final address in interface.addresses) {
+          if (address.type == InternetAddressType.IPv4) {
+            if (_isInSameSubnet(ipAddress, address.address)) {
+              final detectedType = _getInterfaceType(interface.name);
+              return detectedType;
+            }
+          }
+        }
+      }
+      
+      // If still not found, use conservative fallback
+      return _detectConnectionTypeByIPRange(ipAddress);
+    } catch (e) {
+      return 'Unknown';
+    }
+  }
+
+  /// Debug method to list all available network interfaces
+  static Future<List<Map<String, String>>> getNetworkInterfacesDebug() async {
+    try {
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        includeLinkLocal: true,
+      );
+
+      return interfaces.map((interface) {
+        final addresses = interface.addresses
+            .where((addr) => addr.type == InternetAddressType.IPv4)
+            .map((addr) => addr.address)
+            .join(', ');
+        
+        return {
+          'name': interface.name,
+          'addresses': addresses,
+          'type': _getInterfaceType(interface.name),
+        };
+      }).toList();
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /// Check if two IP addresses are in the same subnet
+  static bool _isInSameSubnet(String ip1, String ip2) {
+    try {
+      final parts1 = ip1.split('.').map(int.parse).toList();
+      final parts2 = ip2.split('.').map(int.parse).toList();
+      
+      if (parts1.length != 4 || parts2.length != 4) return false;
+      
+      // Check if first 3 octets match (assuming /24 subnet)
+      return parts1[0] == parts2[0] && parts1[1] == parts2[1] && parts1[2] == parts2[2];
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Detect connection type based on IP address range patterns
+  static String _detectConnectionTypeByIPRange(String ipAddress) {
+    try {
+      final parts = ipAddress.split('.').map(int.parse).toList();
+      if (parts.length != 4) return 'Unknown';
+      
+      // Only make very specific assumptions for known patterns
+      if (parts[0] == 169 && parts[1] == 254) {
+        // Link-local addresses (often used when no DHCP) - usually Ethernet
+        return 'Ethernet';
+      } else if (parts[0] == 10) {
+        // Corporate networks often use 10.x.x.x
+        return 'Network';
+      } else if (parts[0] == 172 && parts[1] >= 16 && parts[1] <= 31) {
+        // Private network range
+        return 'Network';
+      } else if (parts[0] == 192 && parts[1] == 168) {
+        // Home networks - be conservative and just return Network
+        // since both WiFi and Ethernet often use the same subnet
+        return 'Network';
+      }
+      
+      return 'Network';
+    } catch (e) {
+      return 'Unknown';
+    }
   }
 }
