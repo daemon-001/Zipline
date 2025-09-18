@@ -11,18 +11,19 @@ Zipline is a modern, cross-platform file transfer application built with Flutter
 - **Network Discovery**: Automatically discover other Zipline instances on your network
 - **Secure**: All transfers happen locally - no data leaves your network
 - **Cross-Platform**: Works on Windows, macOS, and Linux
-- **Modern UI**: Clean, intuitive interface with dark/light theme support
+- **Modern UI**: Clean, intuitive interface with emoji-based icons
 - **Progress Tracking**: Real-time transfer progress and speed monitoring
 - **Transfer History**: Keep track of all your file transfers
 - **Customizable**: Configurable download directory and network settings
+- **Lightweight**: No external assets - uses system fonts and emoji icons
 
 
 ## Requirements
 
 ### System Requirements
 - **Operating System**: Windows 10/11, macOS 10.14+, or Linux (Ubuntu 18.04+)
-- **RAM**: 512 MB minimum, 2 GB recommended
-- **Storage**: 100 MB free space
+- **RAM**: 256 MB minimum, 1 GB recommended
+- **Storage**: 50 MB free space (lightweight, no external assets)
 - **Network**: Local area network (LAN) connection - WiFi or Ethernet
 
 ### Development Requirements
@@ -87,18 +88,20 @@ Download the latest release from the [Releases](https://github.com/yourusername/
 - Customize the download path in Settings
 
 ### Network Settings
-- **Default Port**: 7250
+- **Default Port**: 6442 (configurable)
 - **Protocol**: UDP/TCP
 - **Discovery**: Broadcast + Unicast
+- **Icons**: Emoji-based platform and file type indicators
 
 ## Configuration
 
 ### Settings
 Access settings through the gear icon in the bottom navigation:
 - **Download Directory**: Set custom download location
-- **Network Port**: Configure listening port (default: 7250)
+- **Network Port**: Configure listening port (default: 6442)
 - **Buddy Name**: Set your display name
 - **History Management**: Clear transfer history
+- **Network Diagnostics**: Test network connectivity and configuration
 
 ### Network Troubleshooting
 - Ensure all devices are on the same network
@@ -114,8 +117,8 @@ lib/
 ├── main.dart                 # Application entry point
 ├── models/                   # Data models
 │   ├── app_settings.dart    # Application settings
-│   ├── peer.dart            # Network peer model
-│   ├── transfer_item.dart   # File transfer item
+│   ├── peer.dart            # Network peer model (emoji icons)
+│   ├── transfer_item.dart   # File transfer item (emoji icons)
 │   └── transfer_session.dart # Transfer session
 ├── providers/               # State management
 │   └── app_state_provider.dart
@@ -124,17 +127,25 @@ lib/
 │   ├── buddies_page.dart    # Network discovery
 │   ├── send_page.dart       # File sending
 │   ├── recent_page.dart     # Transfer history
+│   ├── progress_page.dart   # Transfer progress
 │   ├── settings_page.dart   # Application settings
-│   └── about_page.dart      # About information
+│   ├── about_page.dart      # About information
+│   └── ip_page.dart         # IP address display
 ├── services/                # Business logic
 │   ├── file_transfer_service.dart    # File transfer logic
 │   ├── peer_discovery_service.dart   # Network discovery
-│   └── buddy_message.dart            # Network messaging
-└── widgets/                 # Reusable UI components
-    ├── buddy_list_item.dart
-    ├── tab_bar_widget.dart
-    ├── tool_bar_widget.dart
-    └── transfer_progress_widget.dart
+│   ├── buddy_message.dart            # Network messaging
+│   ├── network_utility.dart         # Network utilities
+│   └── progress_dialog_manager.dart # Progress dialog management
+├── widgets/                 # Reusable UI components
+│   ├── buddy_list_item.dart
+│   ├── tab_bar_widget.dart
+│   ├── tool_bar_widget.dart
+│   ├── transfer_progress_widget.dart
+│   ├── transfer_progress_dialog.dart
+│   └── network_warning_dialog.dart
+└── utils/                   # Utility functions
+    └── system_info.dart     # System information utilities
 ```
 
 ### Building
@@ -176,11 +187,27 @@ We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
+## Technical Details
+
+### Architecture
+- **Framework**: Flutter 3.9.2+ with Dart 3.9.2+
+- **State Management**: Provider pattern
+- **UI**: Material Design 3 with emoji-based icons
+- **Networking**: Custom UDP/TCP implementation for peer discovery and file transfer
+- **Platform Support**: Windows, macOS, Linux
+
+### Key Features
+- **Asset-Free Design**: Uses emoji icons instead of external image assets
+- **Efficient Networking**: Optimized peer discovery and file transfer protocols
+- **Cross-Platform**: Single codebase for all supported platforms
+- **Modern UI**: Clean, responsive interface with system font integration
+
 ## Acknowledgments
 
 - Built with [Flutter](https://flutter.dev/)
 - Inspired by modern file transfer applications
 - Thanks to the Flutter community for excellent packages
+- Emoji icons provided by Unicode Consortium
 
 ## Support
 
