@@ -7,6 +7,7 @@ import '../models/peer.dart';
 import '../models/transfer_item.dart';
 import '../models/transfer_session.dart';
 import '../services/file_transfer_service.dart';
+import '../widgets/top_notification.dart';
 
 class SendPage extends StatefulWidget {
   final Peer peer;
@@ -131,7 +132,7 @@ class _SendPageState extends State<SendPage> with TickerProviderStateMixin {
               ? widget.peer.name.substring(0, 1).toUpperCase()
               : '?',
           style: TextStyle(
-            color: Colors.white,
+            color: theme.colorScheme.onPrimary,
             fontSize: 20,
             fontWeight: FontWeight.bold,
             fontFamily: 'Klill',
@@ -157,7 +158,7 @@ class _SendPageState extends State<SendPage> with TickerProviderStateMixin {
           ),
         ),
         backgroundColor: theme.colorScheme.primary,
-        foregroundColor: Colors.white,
+        foregroundColor: theme.colorScheme.onPrimary,
         elevation: 0,
         centerTitle: true,
       ),
@@ -748,19 +749,11 @@ class _SendPageState extends State<SendPage> with TickerProviderStateMixin {
       if (success) {
         if (mounted) {
           Navigator.of(context).pop();
-          final theme = Theme.of(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                'File transfer started',
-                style: TextStyle(fontFamily: 'LiberationSans'),
-              ),
-              backgroundColor: theme.colorScheme.primary,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
+          TopNotification.show(
+            context,
+            title: 'Transfer Started',
+            message: 'File transfer has been initiated',
+            type: NotificationType.success,
           );
         }
       } else {
@@ -786,19 +779,11 @@ class _SendPageState extends State<SendPage> with TickerProviderStateMixin {
       if (success) {
         if (mounted) {
           Navigator.of(context).pop();
-          final theme = Theme.of(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: const Text(
-                'Text sent successfully',
-                style: TextStyle(fontFamily: 'LiberationSans'),
-              ),
-              backgroundColor: theme.colorScheme.primary,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
+          TopNotification.show(
+            context,
+            title: 'Text Sent',
+            message: 'Text sent successfully',
+            type: NotificationType.success,
           );
         }
       } else {
@@ -823,19 +808,11 @@ class _SendPageState extends State<SendPage> with TickerProviderStateMixin {
   }
 
   void _showError(String message) {
-    final theme = Theme.of(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          style: const TextStyle(fontFamily: 'LiberationSans'),
-        ),
-        backgroundColor: theme.colorScheme.error,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
+    TopNotification.show(
+      context,
+      title: 'Error',
+      message: message,
+      type: NotificationType.error,
     );
   }
 }

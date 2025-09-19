@@ -72,7 +72,7 @@ class UserProfileBar extends StatelessWidget {
                                   child: Icon(
                                     Icons.computer,
                                     size: 20,
-                                    color: Colors.blue,
+                                    color: theme.colorScheme.primary,
                                   ),
                                 ),
                               ),
@@ -162,7 +162,7 @@ class UserProfileBar extends StatelessWidget {
                     ? localPeer!.name.substring(0, 1).toUpperCase()
                     : 'U'),
                 style: TextStyle(
-                  color: Colors.white,
+                  color: theme.colorScheme.onPrimary,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                   fontFamily: 'Klill',

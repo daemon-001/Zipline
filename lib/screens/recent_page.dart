@@ -32,29 +32,32 @@ class _RecentPageState extends State<RecentPage> {
           ..sort((a, b) => b.startedAt.compareTo(a.startedAt)); // Most recent first
 
         if (completedSessions.isEmpty) {
-          return const Center(
+          final theme = Theme.of(context);
+          
+          return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
                   Icons.history,
                   size: 64,
-                  color: Colors.grey,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 Text(
                   'No Recent Transfers',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     fontFamily: 'Klill',
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   'Your recent file transfers will appear here',
                   style: TextStyle(
-                    color: Colors.grey,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     fontFamily: 'LiberationSans',
                   ),
                 ),

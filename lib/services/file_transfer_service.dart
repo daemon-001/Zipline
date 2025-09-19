@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/peer.dart';
 import '../models/transfer_item.dart';
 import '../models/transfer_session.dart';
@@ -15,6 +16,7 @@ class FileTransferService extends ChangeNotifier {
   // Transfer constants
   static const int bufferSize = 1024 * 1024; // 1MB buffer for optimal performance
   static const String textElementName = '___ZIPLINE___TEXT___'; // Text element identifier
+  static const String _historyKey = 'zipline_transfer_history';
 
   ServerSocket? _serverSocket;
   final Map<String, TransferSession> _activeSessions = {};
@@ -22,6 +24,7 @@ class FileTransferService extends ChangeNotifier {
   AppSettings? _settings;
   PeerDiscoveryService? _peerDiscovery;
   int _listenPort = 6442;
+  SharedPreferences? _prefs;
 
   // Stream controllers for session events
   final StreamController<TransferSession> _sessionStartedController = 
@@ -45,8 +48,9 @@ class FileTransferService extends ChangeNotifier {
   int get historyCount => _completedSessions.length;
 
   // Clear all history
-  void clearHistory() {
+  void clearHistory() async {
     _completedSessions.clear();
+    await _saveHistory();
     notifyListeners();
   }
 
@@ -65,7 +69,12 @@ class FileTransferService extends ChangeNotifier {
 
   // Initialize method (compatibility)
   Future<void> initialize() async {
-    // Initialize service
+    try {
+      _prefs = await SharedPreferences.getInstance();
+      await _loadHistory();
+    } catch (e) {
+      // Continue without history if loading fails
+    }
   }
 
   // Check port availability (compatibility) 
@@ -762,9 +771,10 @@ class FileTransferService extends ChangeNotifier {
     );
   }
 
-  void _moveToCompleted(TransferSession session) {
+  void _moveToCompleted(TransferSession session) async {
     _activeSessions.remove(session.id);
     _completedSessions[session.id] = session;
+    await _saveHistory();
     notifyListeners();
   }
 
@@ -836,6 +846,48 @@ class FileTransferService extends ChangeNotifier {
     }
   }
 
+
+  Future<void> _loadHistory() async {
+    if (_prefs == null) return;
+    
+    try {
+      final historyJson = _prefs!.getString(_historyKey);
+      if (historyJson != null && historyJson.isNotEmpty) {
+        final historyList = jsonDecode(historyJson) as List<dynamic>;
+        _completedSessions.clear();
+        
+        for (final sessionData in historyList) {
+          try {
+            final sessionMap = sessionData as Map<String, dynamic>;
+            final session = TransferSession.fromJson(sessionMap);
+            _completedSessions[session.id] = session;
+          } catch (e) {
+            // Skip invalid sessions
+            continue;
+          }
+        }
+        
+        notifyListeners();
+      }
+    } catch (e) {
+      // If loading fails, start with empty history
+      _completedSessions.clear();
+    }
+  }
+  
+  Future<void> _saveHistory() async {
+    if (_prefs == null) return;
+    
+    try {
+      final historyList = _completedSessions.values
+          .map((session) => session.toJson())
+          .toList();
+      final historyJson = jsonEncode(historyList);
+      await _prefs!.setString(_historyKey, historyJson);
+    } catch (e) {
+      // Handle save error silently
+    }
+  }
 
   @override
   void dispose() {

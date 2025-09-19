@@ -25,21 +25,25 @@ class ProgressDialogManager {
     _onCancel = onCancel;
     
     _overlayEntry = OverlayEntry(
-      builder: (context) => _buildProgressOverlay(),
+      builder: (context) => _buildProgressOverlay(context),
     );
 
     Overlay.of(context).insert(_overlayEntry!);
   }
 
-  Widget _buildProgressOverlay() {
+  Widget _buildProgressOverlay(BuildContext context) {
     if (_currentSession == null) return const SizedBox.shrink();
+    final theme = Theme.of(context);
     
     return Material(
-      color: Colors.black.withOpacity(0.5),
+      color: theme.colorScheme.scrim.withValues(alpha: 0.5),
       child: Center(
         child: TransferProgressDialog(
           session: _currentSession!,
           onCancel: _onCancel,
+          onDismiss: () {
+            hideProgress();
+          },
         ),
       ),
     );

@@ -7,6 +7,7 @@ import '../providers/app_state_provider.dart';
 import '../services/file_transfer_service.dart';
 import '../models/app_settings.dart';
 import '../utils/system_info.dart';
+import '../widgets/top_notification.dart';
 
 class SettingsPage extends StatefulWidget {
   final VoidCallback onBack;
@@ -25,19 +26,62 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _startMinimized = false;
   AppTheme _selectedTheme = AppTheme.system;
   String? _diagnosticsResult;
+  bool _isSaving = false;
+  
+  // Original values for change detection
+  late String _originalName;
+  late String _originalPort;
+  late String _originalPath;
+  late bool _originalShowNotifications;
+  late bool _originalStartMinimized;
+  late AppTheme _originalTheme;
 
   @override
   void initState() {
     super.initState();
     final settings = Provider.of<AppStateProvider>(context, listen: false).settings;
-    _nameController = TextEditingController(text: settings?.buddyName ?? SystemInfo.getSystemSignature());
-    _portController = TextEditingController(text: settings?.port.toString() ?? '6442');
-    _pathController = TextEditingController(text: settings?.destPath ?? '');
+    
+    // Initialize current values
+    final name = settings?.buddyName ?? SystemInfo.getSystemSignature();
+    final port = settings?.port.toString() ?? '6442';
+    final path = settings?.destPath ?? '';
     _showNotifications = settings?.showNotifications ?? true;
     _startMinimized = settings?.startMinimized ?? false;
     _selectedTheme = settings?.theme ?? AppTheme.system;
     
+    _nameController = TextEditingController(text: name);
+    _portController = TextEditingController(text: port);
+    _pathController = TextEditingController(text: path);
+    
+    // Store original values
+    _originalName = name;
+    _originalPort = port;
+    _originalPath = path;
+    _originalShowNotifications = _showNotifications;
+    _originalStartMinimized = _startMinimized;
+    _originalTheme = _selectedTheme;
+    
+    // Add listeners for change detection
+    _nameController.addListener(_checkForChanges);
+    _portController.addListener(_checkForChanges);
+    _pathController.addListener(_checkForChanges);
+    
     _initializeDefaultPath();
+  }
+
+  void _checkForChanges() {
+    setState(() {
+      // This will trigger a rebuild and update the floating action button visibility
+    });
+  }
+
+  bool get _hasChanges {
+    return _nameController.text != _originalName ||
+           _portController.text != _originalPort ||
+           _pathController.text != _originalPath ||
+           _showNotifications != _originalShowNotifications ||
+           _startMinimized != _originalStartMinimized ||
+           _selectedTheme != _originalTheme;
   }
 
   Future<void> _initializeDefaultPath() async {
@@ -46,6 +90,7 @@ class _SettingsPageState extends State<SettingsPage> {
         final downloadsDir = await getDownloadsDirectory();
         setState(() {
           _pathController.text = downloadsDir?.path ?? '';
+          _originalPath = _pathController.text; // Update original path
         });
       } catch (e) {
         // Fallback to documents directory
@@ -53,6 +98,7 @@ class _SettingsPageState extends State<SettingsPage> {
           final documentsDir = await getApplicationDocumentsDirectory();
           setState(() {
             _pathController.text = documentsDir.path;
+            _originalPath = _pathController.text; // Update original path
           });
         } catch (e) {
           // Keep empty if both fail
@@ -71,37 +117,81 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: theme.colorScheme.surface,
       body: Column(
         children: [
-          // Header
+          // Header with modern styling
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  theme.colorScheme.primary,
+                  theme.colorScheme.primary.withValues(alpha: 0.8),
+                ],
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
+                  color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),
             child: SafeArea(
               child: Row(
                 children: [
-                  IconButton(
-                    onPressed: widget.onBack,
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.onPrimary.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: IconButton(
+                      onPressed: widget.onBack,
+                      icon: Icon(Icons.arrow_back, color: theme.colorScheme.onPrimary),
+                    ),
                   ),
-                  const Text(
-                    'Settings',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      fontFamily: 'Klill',
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Settings',
+                          style: TextStyle(
+                            color: theme.colorScheme.onPrimary,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'Klill',
+                          ),
+                        ),
+                        Text(
+                          'Configure your Zipline experience',
+                          style: TextStyle(
+                            color: theme.colorScheme.onPrimary.withValues(alpha: 0.8),
+                            fontSize: 14,
+                            fontFamily: 'LiberationSans',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.onPrimary.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.settings,
+                      color: theme.colorScheme.onPrimary,
+                      size: 24,
                     ),
                   ),
                 ],
@@ -162,13 +252,19 @@ class _SettingsPageState extends State<SettingsPage> {
                       'Show Notifications',
                       'Display notifications for transfers',
                       _showNotifications,
-                      (value) => setState(() => _showNotifications = value),
+                      (value) {
+                        setState(() => _showNotifications = value);
+                        _checkForChanges();
+                      },
                     ),
                     _buildSwitchTile(
                       'Start Minimized',
                       'Start the app in system tray',
                       _startMinimized,
-                      (value) => setState(() => _startMinimized = value),
+                      (value) {
+                        setState(() => _startMinimized = value);
+                        _checkForChanges();
+                      },
                     ),
                   ],
                 ),
@@ -187,41 +283,90 @@ class _SettingsPageState extends State<SettingsPage> {
                 
                 // Network Diagnostics section
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey[300]!),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        theme.colorScheme.surface,
+                        theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.5),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: theme.colorScheme.outline.withValues(alpha: 0.1),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.shadow.withValues(alpha: 0.05),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Network Diagnostics',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.network_check,
+                              color: theme.colorScheme.primary,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Network Diagnostics',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: theme.colorScheme.onSurface,
+                              fontFamily: 'Klill',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(
+                        onPressed: _runNetworkDiagnostics,
+                        icon: const Icon(Icons.play_arrow, size: 18),
+                        label: const Text('Run Network Test'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      ElevatedButton(
-                        onPressed: _runNetworkDiagnostics,
-                        child: const Text('Run Network Test'),
-                      ),
                       if (_diagnosticsResult != null) ...[
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 16),
                         Container(
-                          padding: const EdgeInsets.all(12),
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.grey[300]!),
+                            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                              width: 1,
+                            ),
                           ),
                           child: Text(
                             _diagnosticsResult!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontFamily: 'monospace',
                               fontSize: 12,
+                              color: theme.colorScheme.onSurface,
+                              height: 1.4,
                             ),
                           ),
                         ),
@@ -230,40 +375,111 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                 ),
                 
-                const SizedBox(height: 32),
-                
-                // Save button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _saveSettings,
-                    child: const Text('Save Settings'),
-                  ),
-                ),
+                const SizedBox(height: 80), // Extra space for floating action button
               ],
             ),
           ),
         ],
       ),
+      floatingActionButton: _hasChanges ? FloatingActionButton(
+        onPressed: _isSaving ? null : _saveSettings,
+        backgroundColor: theme.colorScheme.primary,
+        foregroundColor: theme.colorScheme.onPrimary,
+        elevation: 6,
+        tooltip: _isSaving ? 'Saving...' : 'Save Settings',
+        child: _isSaving
+            ? SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    theme.colorScheme.onPrimary,
+                  ),
+                ),
+              )
+            : const Icon(Icons.check, size: 24),
+      ) : null,
     );
   }
 
   Widget _buildSection(String title, List<Widget> children) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            fontFamily: 'Klill',
-          ),
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            theme.colorScheme.surface,
+            theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.5),
+          ],
         ),
-        const SizedBox(height: 12),
-        ...children,
-      ],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.1),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.shadow.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  _getSectionIcon(title),
+                  color: theme.colorScheme.primary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Klill',
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...children,
+        ],
+      ),
     );
+  }
+
+  IconData _getSectionIcon(String title) {
+    switch (title) {
+      case 'User Settings':
+        return Icons.person_outline;
+      case 'Network Settings':
+        return Icons.wifi_outlined;
+      case 'File Settings':
+        return Icons.folder_outlined;
+      case 'App Settings':
+        return Icons.palette_outlined;
+      case 'History Management':
+        return Icons.history;
+      default:
+        return Icons.settings_outlined;
+    }
   }
 
   Widget _buildTextField(
@@ -272,21 +488,56 @@ class _SettingsPageState extends State<SettingsPage> {
     String hint, {
     TextInputType? keyboardType,
   }) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
+        style: TextStyle(
+          fontFamily: 'LiberationSans',
+          color: theme.colorScheme.onSurface,
+        ),
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
-          border: const OutlineInputBorder(),
+          labelStyle: TextStyle(
+            fontFamily: 'Klill',
+            fontWeight: FontWeight.w500,
+          ),
+          hintStyle: TextStyle(
+            fontFamily: 'LiberationSans',
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: theme.colorScheme.outline.withValues(alpha: 0.3),
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: theme.colorScheme.outline.withValues(alpha: 0.3),
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(
+              color: theme.colorScheme.primary,
+              width: 2,
+            ),
+          ),
+          filled: true,
+          fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),
     );
   }
 
   Widget _buildPathField() {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Row(
@@ -294,17 +545,57 @@ class _SettingsPageState extends State<SettingsPage> {
           Expanded(
             child: TextField(
               controller: _pathController,
-              decoration: const InputDecoration(
+              style: TextStyle(
+                fontFamily: 'LiberationSans',
+                color: theme.colorScheme.onSurface,
+              ),
+              decoration: InputDecoration(
                 labelText: 'Download Path',
                 hintText: 'Where received files will be saved',
-                border: OutlineInputBorder(),
+                labelStyle: TextStyle(
+                  fontFamily: 'Klill',
+                  fontWeight: FontWeight.w500,
+                ),
+                hintStyle: TextStyle(
+                  fontFamily: 'LiberationSans',
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                  ),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: theme.colorScheme.primary,
+                    width: 2,
+                  ),
+                ),
+                filled: true,
+                fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          ElevatedButton(
+          const SizedBox(width: 12),
+          FilledButton.icon(
             onPressed: _browseForFolder,
-            child: const Text('Browse'),
+            icon: const Icon(Icons.folder_open, size: 18),
+            label: const Text('Browse'),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
         ],
       ),
@@ -312,29 +603,62 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildThemeSelector() {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Theme',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w500,
+              fontFamily: 'Klill',
+              color: theme.colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<AppTheme>(
             value: _selectedTheme,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            style: TextStyle(
+              fontFamily: 'LiberationSans',
+              color: theme.colorScheme.onSurface,
             ),
-            items: AppTheme.values.map((AppTheme theme) {
+            decoration: InputDecoration(
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                ),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.3),
+                ),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(
+                  color: theme.colorScheme.primary,
+                  width: 2,
+                ),
+              ),
+              filled: true,
+              fillColor: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            ),
+            items: AppTheme.values.map((AppTheme themeValue) {
               return DropdownMenuItem<AppTheme>(
-                value: theme,
-                child: Text(_getThemeDisplayName(theme)),
+                value: themeValue,
+                child: Text(
+                  _getThemeDisplayName(themeValue),
+                  style: TextStyle(
+                    fontFamily: 'LiberationSans',
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
               );
             }).toList(),
             onChanged: (AppTheme? newTheme) {
@@ -342,6 +666,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 setState(() {
                   _selectedTheme = newTheme;
                 });
+                _checkForChanges();
               }
             },
           ),
@@ -361,19 +686,59 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+
   Widget _buildSwitchTile(
     String title,
     String subtitle,
     bool value,
     Function(bool) onChanged,
   ) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: SwitchListTile(
-        title: Text(title),
-        subtitle: Text(subtitle),
-        value: value,
-        onChanged: onChanged,
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'Klill',
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontFamily: 'LiberationSans',
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: theme.colorScheme.primary,
+          ),
+        ],
       ),
     );
   }
@@ -393,42 +758,60 @@ class _SettingsPageState extends State<SettingsPage> {
         setState(() {
           _pathController.text = selectedDirectory;
         });
+        _checkForChanges();
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error selecting folder: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        TopNotification.show(
+          context,
+          title: 'Folder Selection Error',
+          message: 'Error selecting folder: $e',
+          type: NotificationType.error,
+        );
+      }
     }
   }
 
-  void _saveSettings() {
+  void _saveSettings() async {
+    if (_isSaving) return;
+    
+    setState(() {
+      _isSaving = true;
+    });
+    
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     
     // Validate port
     final port = int.tryParse(_portController.text);
     if (port == null || port < 1 || port > 65535) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a valid port number (1-65535)'),
-          backgroundColor: Colors.red,
-        ),
+      setState(() {
+        _isSaving = false;
+      });
+      TopNotification.show(
+        context,
+        title: 'Invalid Port Number',
+        message: 'Please enter a valid port number (1-65535)',
+        type: NotificationType.error,
       );
       return;
     }
     
     // Validate buddy name
     if (_nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a buddy name'),
-          backgroundColor: Colors.red,
-        ),
+      setState(() {
+        _isSaving = false;
+      });
+      TopNotification.show(
+        context,
+        title: 'Missing Buddy Name',
+        message: 'Please enter a buddy name',
+        type: NotificationType.error,
       );
       return;
     }
+    
+    // Simulate save delay for better UX
+    await Future.delayed(const Duration(milliseconds: 800));
     
     final currentSettings = appState.settings ?? AppSettings(
       buddyName: SystemInfo.getSystemSignature(),
@@ -446,32 +829,92 @@ class _SettingsPageState extends State<SettingsPage> {
     
     appState.updateSettings(newSettings);
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Settings saved successfully'),
-        backgroundColor: Colors.green,
-      ),
-    );
-    
-    // Go back after saving
-    Future.delayed(const Duration(milliseconds: 500), () {
-      widget.onBack();
+    setState(() {
+      _isSaving = false;
     });
+    
+    if (mounted) {
+      TopNotification.show(
+        context,
+        title: 'Settings Saved',
+        message: 'Your settings have been saved successfully',
+        type: NotificationType.success,
+      );
+      
+      // Go back after saving
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          widget.onBack();
+        }
+      });
+    }
   }
 
   Widget _buildHistoryTile() {
+    final theme = Theme.of(context);
     return Consumer<FileTransferService>(
       builder: (context, fileTransfer, child) {
-        return ListTile(
-          leading: const Icon(Icons.history),
-          title: const Text('Transfer History'),
-          subtitle: Text('${fileTransfer.historyCount} completed transfers'),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.1),
+              width: 1,
+            ),
+          ),
+          child: Row(
             children: [
-              TextButton(
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  Icons.history,
+                  color: theme.colorScheme.primary,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Transfer History',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        fontFamily: 'Klill',
+                        color: theme.colorScheme.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${fileTransfer.historyCount} completed transfers',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontFamily: 'LiberationSans',
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 16),
+              OutlinedButton.icon(
                 onPressed: fileTransfer.historyCount > 0 ? _clearHistory : null,
-                child: const Text('Clear All'),
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: const Text('Clear All'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
               ),
             ],
           ),
@@ -481,25 +924,144 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _clearHistory() {
+    final theme = Theme.of(context);
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Clear Transfer History'),
-        content: const Text('Are you sure you want to clear all transfer history? This action cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        backgroundColor: theme.colorScheme.surface,
+        elevation: 8,
+        shadowColor: theme.colorScheme.shadow.withValues(alpha: 0.3),
+        titlePadding: EdgeInsets.zero,
+        contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        title: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                theme.colorScheme.errorContainer.withValues(alpha: 0.3),
+                theme.colorScheme.errorContainer.withValues(alpha: 0.1),
+              ],
+            ),
+            borderRadius: const BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
           ),
-          TextButton(
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.error.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.delete_forever,
+                  color: theme.colorScheme.error,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  'Clear Transfer History',
+                  style: TextStyle(
+                    fontFamily: 'Klill',
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to clear all transfer history?',
+              style: TextStyle(
+                fontFamily: 'LiberationSans',
+                fontSize: 16,
+                color: theme.colorScheme.onSurface,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.errorContainer.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: theme.colorScheme.error.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    color: theme.colorScheme.error,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'This action cannot be undone',
+                      style: TextStyle(
+                        fontFamily: 'LiberationSans',
+                        fontSize: 12,
+                        color: theme.colorScheme.error,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).pop(),
+            icon: const Icon(Icons.close, size: 16),
+            label: const Text('Cancel'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
             onPressed: () {
               Provider.of<FileTransferService>(context, listen: false).clearHistory();
               Navigator.of(context).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Transfer history cleared')),
+              TopNotification.show(
+                context,
+                title: 'History Cleared',
+                message: 'Transfer history has been cleared',
+                type: NotificationType.success,
               );
             },
-            child: const Text('Clear'),
+            icon: const Icon(Icons.delete_forever, size: 16),
+            label: const Text('Clear History'),
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
         ],
       ),

@@ -56,21 +56,30 @@ class AvatarWebServer {
            request.uri.path == '/avatar' || 
            request.uri.path.startsWith('/avatar'))) {
         
-        // Set HTTP headers
+        // Set HTTP headers to prevent Windows from interpreting as file server
         response.headers.set('Content-Type', 'image/png');
         response.headers.set('Content-Length', _cachedAvatar?.length ?? 0);
         response.headers.set('Cache-Control', 'no-cache');
+        response.headers.set('Server', 'Zipline-Avatar-Server');
+        response.headers.set('X-Content-Type-Options', 'nosniff');
+        response.headers.set('X-Robots-Tag', 'noindex, nofollow');
         
         // Write avatar data
         if (_cachedAvatar != null) {
           response.add(_cachedAvatar!);
         }
       } else {
-        // Return 404 for other requests
+        // Return 404 for other requests with explicit headers
         response.statusCode = HttpStatus.notFound;
+        response.headers.set('Content-Type', 'text/plain');
+        response.headers.set('Server', 'Zipline-Avatar-Server');
+        response.write('Not Found');
       }
     } catch (e) {
       response.statusCode = HttpStatus.internalServerError;
+      response.headers.set('Content-Type', 'text/plain');
+      response.headers.set('Server', 'Zipline-Avatar-Server');
+      response.write('Internal Server Error');
     } finally {
       response.close();
     }

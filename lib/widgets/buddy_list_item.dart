@@ -99,7 +99,7 @@ class BuddyListItem extends StatelessWidget {
                                   child: Icon(
                                     Icons.computer,
                                     size: 16,
-                                    color: Colors.blue,
+                                    color: theme.colorScheme.primary,
                                   ),
                                 ),
                               ),
@@ -173,7 +173,7 @@ class BuddyListItem extends StatelessWidget {
                               _getConnectionTypeDisplayName(peer.connectionType!),
                               style: TextStyle(
                                 fontSize: 10,
-                                color: Colors.white,
+                                color: theme.colorScheme.onPrimary,
                                 fontWeight: FontWeight.w600,
                                 fontFamily: 'LiberationSans',
                               ),
@@ -187,8 +187,8 @@ class BuddyListItem extends StatelessWidget {
               
               const SizedBox(width: 12),
               
-              // Arrow icon for remote peers, IP icon for local peer
-              if (!isLocalPeer)
+              // Arrow icon for remote peers only when onTap is provided, IP icon for local peer
+              if (!isLocalPeer && onTap != null)
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -201,7 +201,7 @@ class BuddyListItem extends StatelessWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 )
-              else
+              else if (isLocalPeer)
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
@@ -329,7 +329,7 @@ class BuddyListItem extends StatelessWidget {
               ? peer.name.substring(0, 1).toUpperCase()
               : '?',
           style: TextStyle(
-            color: Colors.white,
+            color: theme.colorScheme.onPrimary,
             fontSize: 24,
             fontWeight: FontWeight.bold,
             fontFamily: 'Klill',

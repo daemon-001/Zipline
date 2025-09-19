@@ -179,7 +179,7 @@ class NetworkUtility {
     }
   }
 
-  /// Test connectivity to a specific IP and port
+  /// Check connectivity to a specific IP and port
   static Future<bool> testConnectivity(String address, int port, {Duration timeout = const Duration(seconds: 3)}) async {
     try {
       final socket = await Socket.connect(address, port, timeout: timeout);
@@ -239,30 +239,6 @@ class NetworkUtility {
     }
   }
 
-  /// Debug method to list all available network interfaces
-  static Future<List<Map<String, String>>> getNetworkInterfacesDebug() async {
-    try {
-      final interfaces = await NetworkInterface.list(
-        includeLoopback: false,
-        includeLinkLocal: true,
-      );
-
-      return interfaces.map((interface) {
-        final addresses = interface.addresses
-            .where((addr) => addr.type == InternetAddressType.IPv4)
-            .map((addr) => addr.address)
-            .join(', ');
-        
-        return {
-          'name': interface.name,
-          'addresses': addresses,
-          'type': _getInterfaceType(interface.name),
-        };
-      }).toList();
-    } catch (e) {
-      return [];
-    }
-  }
 
   /// Check if two IP addresses are in the same subnet
   static bool _isInSameSubnet(String ip1, String ip2) {

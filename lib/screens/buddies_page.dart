@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../services/peer_discovery_service.dart';
 import '../models/peer.dart';
 import '../widgets/buddy_list_item.dart';
-import '../widgets/transfer_dialog.dart';
+import 'transfer_page.dart';
 
 class BuddiesPage extends StatefulWidget {
   const BuddiesPage({super.key});
@@ -34,10 +34,13 @@ class _BuddiesPageState extends State<BuddiesPage> {
   }
 
   void _onPeerSelected(Peer peer) {
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      builder: (context) => TransferDialog(peer: peer),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => TransferPage(
+          peer: peer,
+          // Remove redundant onBack callback since TransferPage handles navigation itself
+        ),
+      ),
     );
   }
 
@@ -51,20 +54,21 @@ class _BuddiesPageState extends State<BuddiesPage> {
             if (_isRefreshing)
               Container(
                 padding: const EdgeInsets.all(16),
-                child: const Row(
+                child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
-                    SizedBox(width: 8),
+                    const SizedBox(width: 8),
                     Text(
                       'Refreshing Buddies...',
                       style: TextStyle(
-                        color: Colors.grey,
+                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                         fontSize: 14,
+                        fontFamily: 'LiberationSans',
                       ),
                     ),
                   ],

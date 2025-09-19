@@ -90,13 +90,13 @@ class AboutPage extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Center(
+            child: Center(
               child: Text(
                 'Z',
                 style: TextStyle(
                   fontSize: 56,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: theme.colorScheme.onPrimary,
                   fontFamily: 'Klill',
                 ),
               ),
@@ -301,13 +301,13 @@ class AboutPage extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Colors.orange.withValues(alpha: 0.1),
-            Colors.amber.withValues(alpha: 0.05),
+            theme.colorScheme.tertiary.withOpacity(0.1),
+            theme.colorScheme.tertiary.withOpacity(0.05),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: Colors.orange.withValues(alpha: 0.3),
+          color: theme.colorScheme.tertiary.withOpacity(0.3),
           width: 1,
         ),
       ),
@@ -316,12 +316,12 @@ class AboutPage extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.2),
+              color: theme.colorScheme.tertiary.withOpacity(0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
               Icons.security,
-              color: Colors.orange[700],
+              color: theme.colorScheme.tertiary,
               size: 24,
             ),
           ),
@@ -334,7 +334,7 @@ class AboutPage extends StatelessWidget {
                   'Security Notice',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: Colors.orange[800],
+                    color: theme.colorScheme.tertiary,
                     fontFamily: 'Klill',
                   ),
                 ),
@@ -342,7 +342,7 @@ class AboutPage extends StatelessWidget {
                 Text(
                   'Zipline transfers files without encryption. Only use in trusted networks.',
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.orange[700],
+                    color: theme.colorScheme.tertiary,
                     fontFamily: 'LiberationSans',
                     height: 1.4,
                   ),

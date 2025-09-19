@@ -10,6 +10,7 @@ import '../services/file_transfer_service.dart';
 import '../services/progress_dialog_manager.dart';
 import '../services/network_utility.dart';
 import '../widgets/network_warning_dialog.dart';
+import '../widgets/top_notification.dart';
 import '../widgets/tab_bar_widget.dart';
 import '../widgets/user_profile_bar.dart';
 import 'buddies_page.dart';
@@ -163,25 +164,16 @@ class _MainScreenState extends State<MainScreen> {
       });
 
       fileTransfer.onSessionCompleted.listen((session) {
-        // Hide progress dialog after showing completion briefly
+        // Update progress dialog to show completion (don't auto-close)
         if (mounted) {
           ProgressDialogManager.instance.updateProgress(session);
-          ProgressDialogManager.instance.hideProgressWithDelay();
         }
       });
 
       fileTransfer.onSessionFailed.listen((session) {
-        // Hide progress dialog and show error
+        // Update progress dialog to show failure (don't auto-close)
         if (mounted) {
-          ProgressDialogManager.instance.hideProgress();
-          
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Transfer failed: ${session.error ?? 'Unknown error'}'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 5),
-            ),
-          );
+          ProgressDialogManager.instance.updateProgress(session);
         }
       });
 
@@ -262,13 +254,13 @@ class _MainScreenState extends State<MainScreen> {
                       Container(
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
-                          color: Colors.red.withValues(alpha: 0.1),
+                          color: theme.colorScheme.errorContainer,
                           borderRadius: BorderRadius.circular(24),
                         ),
                         child: Icon(
                           Icons.error_outline,
                           size: 64,
-                          color: Colors.red[600],
+                          color: theme.colorScheme.error,
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -284,7 +276,7 @@ class _MainScreenState extends State<MainScreen> {
                         appState.errorMessage!,
                         textAlign: TextAlign.center,
                         style: theme.textTheme.bodyLarge?.copyWith(
-                          color: Colors.red[600],
+                          color: theme.colorScheme.error,
                         ),
                       ),
                       const SizedBox(height: 24),

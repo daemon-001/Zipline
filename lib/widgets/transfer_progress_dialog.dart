@@ -5,11 +5,13 @@ import '../models/transfer_item.dart';
 class TransferProgressDialog extends StatefulWidget {
   final TransferSession session;
   final VoidCallback? onCancel;
+  final VoidCallback? onDismiss;
 
   const TransferProgressDialog({
     Key? key,
     required this.session,
     this.onCancel,
+    this.onDismiss,
   }) : super(key: key);
 
   @override
@@ -83,22 +85,6 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
     return '';
   }
 
-  String _getEstimatedTimeText() {
-    if (widget.session.status == TransferStatus.inProgress && 
-        widget.session.startedAt != null &&
-        widget.session.transferredSize > 0) {
-      final elapsed = DateTime.now().difference(widget.session.startedAt!);
-      final bytesPerSecond = widget.session.transferredSize / elapsed.inSeconds;
-      if (bytesPerSecond > 0) {
-        final remainingBytes = widget.session.totalSize - widget.session.transferredSize;
-        final remainingSeconds = (remainingBytes / bytesPerSecond).round();
-        if (remainingSeconds > 0) {
-          return _formatDuration(Duration(seconds: remainingSeconds));
-        }
-      }
-    }
-    return '';
-  }
 
   String _formatBytes(int bytes) {
     const suffixes = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -111,28 +97,19 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
     return '${size.toStringAsFixed(i == 0 ? 0 : 1)} ${suffixes[i]}';
   }
 
-  String _formatDuration(Duration duration) {
-    if (duration.inHours > 0) {
-      return '${duration.inHours}h ${duration.inMinutes.remainder(60)}m';
-    } else if (duration.inMinutes > 0) {
-      return '${duration.inMinutes}m ${duration.inSeconds.remainder(60)}s';
-    } else {
-      return '${duration.inSeconds}s';
-    }
-  }
-
   Color _getStatusColor() {
+    final theme = Theme.of(context);
     switch (widget.session.status) {
       case TransferStatus.pending:
-        return Colors.orange;
+        return theme.colorScheme.tertiary;
       case TransferStatus.inProgress:
-        return Colors.blue;
+        return theme.colorScheme.primary;
       case TransferStatus.completed:
-        return Colors.green;
+        return theme.colorScheme.primary;
       case TransferStatus.failed:
-        return Colors.red;
+        return theme.colorScheme.error;
       case TransferStatus.cancelled:
-        return Colors.grey;
+        return theme.colorScheme.onSurfaceVariant;
     }
   }
 
@@ -171,6 +148,7 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
   @override
   Widget build(BuildContext context) {
     final progress = _getOverallProgress();
+    final theme = Theme.of(context);
     
     return FadeTransition(
       opacity: _fadeAnimation,
@@ -180,11 +158,11 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
           width: 400,
           padding: const EdgeInsets.all(0),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(12),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: theme.colorScheme.shadow.withOpacity(0.3),
                 blurRadius: 20,
                 spreadRadius: 2,
                 offset: const Offset(0, 10),
@@ -223,10 +201,10 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
                             widget.session.direction == TransferDirection.sending
                                 ? 'Sending to ${widget.session.peer.name}'
                                 : 'Receiving from ${widget.session.peer.name}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Colors.black87,
+                              color: theme.colorScheme.onSurface,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -236,7 +214,7 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
                             _getTransferTitle(),
                             style: TextStyle(
                               fontSize: 14,
-                              color: Colors.grey[600],
+                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -244,17 +222,6 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
                         ],
                       ),
                     ),
-                    if (widget.onCancel != null && 
-                        widget.session.status == TransferStatus.inProgress)
-                      IconButton(
-                        onPressed: () {
-                          widget.onCancel?.call();
-                          Navigator.of(context).pop();
-                        },
-                        icon: const Icon(Icons.close),
-                        color: Colors.grey[600],
-                        iconSize: 20,
-                      ),
                   ],
                 ),
               ),
@@ -268,7 +235,7 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
                     Container(
                       height: 8,
                       decoration: BoxDecoration(
-                        color: Colors.grey[200],
+                        color: theme.colorScheme.surfaceVariant,
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: ClipRRect(
@@ -297,10 +264,10 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
                         ),
                         Text(
                           '${(progress * 100).toStringAsFixed(1)}%',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w500,
-                            color: Colors.black87,
+                            color: theme.colorScheme.onSurface,
                           ),
                         ),
                       ],
@@ -316,7 +283,7 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
                           '${_formatBytes(widget.session.transferredSize)} / ${_formatBytes(widget.session.totalSize)}',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey[600],
+                            color: theme.colorScheme.onSurfaceVariant,
                           ),
                         ),
                         if (_getTransferSpeedText().isNotEmpty)
@@ -324,41 +291,85 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
                             _getTransferSpeedText(),
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey[600],
+                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
                       ],
                     ),
-                    
-                    if (_getEstimatedTimeText().isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Files: ${widget.session.completedFiles}/${widget.session.totalFiles}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                          Text(
-                            'ETA: ${_getEstimatedTimeText()}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
                   ],
                 ),
               ),
+              
+              // Action buttons
+              _buildActionButtons(theme),
             ],
           ),
         ),
       ),
     );
+  }
+  
+  Widget _buildActionButtons(ThemeData theme) {
+    final status = widget.session.status;
+    
+    // Show different buttons based on status
+    if (status == TransferStatus.completed || status == TransferStatus.failed || status == TransferStatus.cancelled) {
+      // Show OK button for completed, failed, or cancelled transfers
+      return Container(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            FilledButton.icon(
+              onPressed: () {
+                widget.onDismiss?.call();
+              },
+              icon: Icon(
+                status == TransferStatus.completed ? Icons.check : Icons.close,
+                size: 16,
+              ),
+              label: const Text('OK'),
+              style: FilledButton.styleFrom(
+                backgroundColor: status == TransferStatus.completed 
+                    ? theme.colorScheme.primary
+                    : status == TransferStatus.failed
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.outline,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else if (status == TransferStatus.inProgress && widget.onCancel != null) {
+      // Show Cancel button for in-progress transfers
+      return Container(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () {
+                widget.onCancel?.call();
+              },
+              icon: const Icon(Icons.close, size: 16),
+              label: const Text('Cancel'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    
+    // No buttons for pending status
+    return const SizedBox.shrink();
   }
 }

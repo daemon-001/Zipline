@@ -8,36 +8,37 @@ class ProgressPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Consumer<FileTransferService>(
       builder: (context, fileTransferService, child) {
         final activeSessions = fileTransferService.activeSessions;
         
         if (activeSessions.isEmpty) {
-          return const Center(
+          return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
                   Icons.cloud_upload_outlined,
                   size: 64,
-                  color: Colors.grey,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-                SizedBox(height: 16),
+                const SizedBox(height: 16),
                 Text(
                   'No Active Transfers',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     fontFamily: 'Klill',
-                    color: Colors.grey,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   'File transfers will appear here when in progress',
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.grey,
+                    color: theme.colorScheme.onSurfaceVariant,
                     fontFamily: 'LiberationSans',
                   ),
                 ),

@@ -76,7 +76,7 @@ class SystemInfo {
     return getSystemUsername();
   }
 
-  /// Clear cached values (useful for testing)
+  /// Clear cached values
   static void clearCache() {
     _cachedUsername = null;
     _cachedHostname = null;

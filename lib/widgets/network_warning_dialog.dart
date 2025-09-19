@@ -26,26 +26,59 @@ class NetworkWarningDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return AlertDialog(
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
       ),
-      title: Row(
-        children: [
-          Icon(
-            Icons.warning_amber_rounded,
-            color: Colors.orange,
-            size: 28,
+      backgroundColor: theme.colorScheme.surface,
+      elevation: 8,
+      shadowColor: theme.colorScheme.shadow.withValues(alpha: 0.3),
+      titlePadding: EdgeInsets.zero,
+      contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      title: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              theme.colorScheme.tertiaryContainer.withValues(alpha: 0.3),
+              theme.colorScheme.tertiaryContainer.withValues(alpha: 0.1),
+            ],
           ),
-          const SizedBox(width: 12),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.tertiary.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                Icons.warning_amber_rounded,
+                color: theme.colorScheme.tertiary,
+                size: 24,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Klill',
+                  color: theme.colorScheme.onSurface,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -53,22 +86,30 @@ class NetworkWarningDialog extends StatelessWidget {
         children: [
           Text(
             message,
-            style: const TextStyle(fontSize: 14),
+            style: TextStyle(
+              fontSize: 16,
+              fontFamily: 'LiberationSans',
+              color: theme.colorScheme.onSurface,
+              height: 1.4,
+            ),
           ),
           if (suggestion != null) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.blue.shade50,
+                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.blue.shade200),
+                border: Border.all(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                  width: 1,
+                ),
               ),
               child: Row(
                 children: [
                   Icon(
                     Icons.lightbulb_outline,
-                    color: Colors.blue.shade600,
+                    color: theme.colorScheme.primary,
                     size: 20,
                   ),
                   const SizedBox(width: 8),
@@ -77,7 +118,9 @@ class NetworkWarningDialog extends StatelessWidget {
                       suggestion!,
                       style: TextStyle(
                         fontSize: 13,
-                        color: Colors.blue.shade800,
+                        fontFamily: 'LiberationSans',
+                        color: theme.colorScheme.primary,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
@@ -89,24 +132,52 @@ class NetworkWarningDialog extends StatelessWidget {
       ),
       actions: [
         if (canContinue)
-          TextButton(
+          OutlinedButton.icon(
             onPressed: onContinue,
-            child: const Text('Continue Anyway'),
+            icon: const Icon(Icons.arrow_forward, size: 16),
+            label: const Text('Continue Anyway'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
         if (canChangePort)
-          TextButton(
+          OutlinedButton.icon(
             onPressed: onChangePort,
-            child: const Text('Change Port'),
+            icon: const Icon(Icons.settings, size: 16),
+            label: const Text('Change Port'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
         if (canRetry)
-          FilledButton(
+          FilledButton.icon(
             onPressed: onRetry,
-            child: const Text('Retry'),
+            icon: const Icon(Icons.refresh, size: 16),
+            label: const Text('Retry'),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
         if (!canRetry && !canChangePort && !canContinue)
-          FilledButton(
+          FilledButton.icon(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
+            icon: const Icon(Icons.check, size: 16),
+            label: const Text('OK'),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
           ),
       ],
     );
