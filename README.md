@@ -21,7 +21,7 @@ Zipline is a modern, cross-platform file transfer application built with Flutter
 ## Requirements
 
 ### System Requirements
-- **Operating System**: Windows 10/11, macOS 10.14+, or Linux (Ubuntu 18.04+)
+- **Operating System**: Windows 10/11, Android, macOS 10.14+, or Linux (Ubuntu 18.04+)
 - **RAM**: 256 MB minimum, 1 GB recommended
 - **Storage**: 50 MB free space (lightweight, no external assets)
 - **Network**: Local area network (LAN) connection - WiFi or Ethernet
