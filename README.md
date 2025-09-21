@@ -6,7 +6,9 @@ Zipline is a modern, cross-platform file transfer application built with Flutter
 
 ## Visuals
 <img width="982" height="703" alt="zipline 21-09-2025 09_10_15 PM" src="https://github.com/user-attachments/assets/b4c1b3ac-9023-41c8-aa4c-ccfc89f40af5" />
+--
 <img width="982" height="703" alt="zipline 21-09-2025 09_10_23 PM" src="https://github.com/user-attachments/assets/70059fca-9c25-4a21-a7ef-646ca92277ae" />
+--
 <img width="982" height="703" alt="zipline 21-09-2025 09_10_42 PM" src="https://github.com/user-attachments/assets/1f92f6cf-2d07-47a5-86b1-4e5f26e9efe4" />
 
 
