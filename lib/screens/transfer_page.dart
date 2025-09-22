@@ -11,7 +11,6 @@ import '../models/transfer_session.dart';
 import '../services/file_transfer_service.dart';
 import '../services/profile_image_service.dart';
 import '../widgets/buddy_list_item.dart';
-import '../widgets/transfer_progress_widget.dart';
 import '../widgets/top_notification.dart';
 
 class TransferPage extends StatefulWidget {
@@ -199,75 +198,45 @@ class _TransferPageState extends State<TransferPage>
   }
 
   Widget _buildTransferContent(BuildContext context, ThemeData theme, bool isDark) {
-    return Consumer<FileTransferService>(
-      builder: (context, fileTransfer, child) {
-        // Get active sessions for this peer
-        final activeSessions = fileTransfer.activeSessions.values
-            .where((session) => session.peer.address == widget.peer.address)
-            .toList();
-        
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Column(
-            children: [
-              // Active transfers section
-              if (activeSessions.isNotEmpty) ...[
-                Expanded(
-                  flex: 1,
-                  child: ListView.builder(
-                    itemCount: activeSessions.length,
-                    itemBuilder: (context, index) {
-                      final session = activeSessions[index];
-                      return TransferProgressWidget(
-                        session: session,
-                        onCancel: () {
-                          fileTransfer.cancelTransfer(session.id);
-                        },
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
-              
-              // Drag and drop area
-              Expanded(
-                flex: activeSessions.isNotEmpty ? 2 : 3,
-                child: DropTarget(
-                  onDragEntered: (details) {
-                    setState(() {
-                      _isDragOver = true;
-                    });
-                  },
-                  onDragExited: (details) {
-                    setState(() {
-                      _isDragOver = false;
-                    });
-                  },
-                  onDragDone: (details) {
-                    setState(() {
-                      _isDragOver = false;
-                    });
-                    // Extract file paths from dropped files
-                    final filePaths = details.files.map((file) => file.path).toList();
-                    if (filePaths.isNotEmpty) {
-                      _sendFiles(filePaths);
-                    }
-                  },
-                  child: _buildDragDropArea(context, theme, isDark),
-                ),
-              ),
-              
-              const SizedBox(height: 20),
-              
-              // Action buttons
-              _buildActionButtons(context, theme),
-              
-              const SizedBox(height: 20),
-            ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        children: [
+          // Drag and drop area
+          Expanded(
+            child: DropTarget(
+              onDragEntered: (details) {
+                setState(() {
+                  _isDragOver = true;
+                });
+              },
+              onDragExited: (details) {
+                setState(() {
+                  _isDragOver = false;
+                });
+              },
+              onDragDone: (details) {
+                setState(() {
+                  _isDragOver = false;
+                });
+                // Extract file paths from dropped files
+                final filePaths = details.files.map((file) => file.path).toList();
+                if (filePaths.isNotEmpty) {
+                  _sendFiles(filePaths);
+                }
+              },
+              child: _buildDragDropArea(context, theme, isDark),
+            ),
           ),
-        );
-      },
+          
+          const SizedBox(height: 20),
+          
+          // Action buttons
+          _buildActionButtons(context, theme),
+          
+          const SizedBox(height: 20),
+        ],
+      ),
     );
   }
 

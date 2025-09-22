@@ -52,7 +52,7 @@ class UserProfileBar extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        localPeer != null ? 'You - ${_extractHostname(localPeer!.name)}' : 'You',
+                        localPeer != null ? _extractHostname(localPeer!.name) : 'Device',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,

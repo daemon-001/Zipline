@@ -5,10 +5,8 @@ class NetworkWarningDialog extends StatelessWidget {
   final String message;
   final String? suggestion;
   final VoidCallback? onRetry;
-  final VoidCallback? onChangePort;
   final VoidCallback? onContinue;
   final bool canRetry;
-  final bool canChangePort;
   final bool canContinue;
 
   const NetworkWarningDialog({
@@ -17,10 +15,8 @@ class NetworkWarningDialog extends StatelessWidget {
     required this.message,
     this.suggestion,
     this.onRetry,
-    this.onChangePort,
     this.onContinue,
     this.canRetry = false,
-    this.canChangePort = false,
     this.canContinue = false,
   }) : super(key: key);
 
@@ -35,8 +31,9 @@ class NetworkWarningDialog extends StatelessWidget {
       elevation: 8,
       shadowColor: theme.colorScheme.shadow.withValues(alpha: 0.3),
       titlePadding: EdgeInsets.zero,
-      contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
       title: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
@@ -54,15 +51,15 @@ class NetworkWarningDialog extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: theme.colorScheme.tertiary.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
                 Icons.warning_amber_rounded,
                 color: theme.colorScheme.tertiary,
-                size: 24,
+                size: 26,
               ),
             ),
             const SizedBox(width: 16),
@@ -70,7 +67,7 @@ class NetworkWarningDialog extends StatelessWidget {
               child: Text(
                 title,
                 style: TextStyle(
-                  fontSize: 20,
+                  fontSize: 22,
                   fontWeight: FontWeight.bold,
                   fontFamily: 'Klill',
                   color: theme.colorScheme.onSurface,
@@ -90,37 +87,39 @@ class NetworkWarningDialog extends StatelessWidget {
               fontSize: 16,
               fontFamily: 'LiberationSans',
               color: theme.colorScheme.onSurface,
-              height: 1.4,
+              height: 1.5,
             ),
           ),
           if (suggestion != null) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(8),
+                color: theme.colorScheme.primaryContainer.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                  color: theme.colorScheme.primary.withValues(alpha: 0.2),
                   width: 1,
                 ),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
                     Icons.lightbulb_outline,
                     color: theme.colorScheme.primary,
                     size: 20,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       suggestion!,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 14,
                         fontFamily: 'LiberationSans',
                         color: theme.colorScheme.primary,
                         fontWeight: FontWeight.w500,
+                        height: 1.4,
                       ),
                     ),
                   ),
@@ -131,54 +130,49 @@ class NetworkWarningDialog extends StatelessWidget {
         ],
       ),
       actions: [
-        if (canContinue)
-          OutlinedButton.icon(
-            onPressed: onContinue,
-            icon: const Icon(Icons.arrow_forward, size: 16),
-            label: const Text('Continue Anyway'),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (canContinue) ...[
+              OutlinedButton.icon(
+                onPressed: onContinue,
+                icon: const Icon(Icons.arrow_forward, size: 16),
+                label: const Text('Continue Anyway'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
-            ),
-          ),
-        if (canChangePort)
-          OutlinedButton.icon(
-            onPressed: onChangePort,
-            icon: const Icon(Icons.settings, size: 16),
-            label: const Text('Change Port'),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+              const SizedBox(width: 12),
+            ],
+            if (canRetry)
+              FilledButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh, size: 16),
+                label: const Text('Retry'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
-            ),
-          ),
-        if (canRetry)
-          FilledButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh, size: 16),
-            label: const Text('Retry'),
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+            if (!canRetry && !canContinue)
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(Icons.check, size: 16),
+                label: const Text('OK'),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
-            ),
-          ),
-        if (!canRetry && !canChangePort && !canContinue)
-          FilledButton.icon(
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.check, size: 16),
-            label: const Text('OK'),
-            style: FilledButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
+          ],
+        ),
       ],
     );
   }
@@ -189,19 +183,34 @@ class NetworkWarningDialog extends StatelessWidget {
     required int port,
     String? conflictingApp,
   }) async {
+    // Create more helpful message based on the conflicting application
+    String message;
+    String suggestion;
+    
+    if (conflictingApp != null && conflictingApp != 'Unknown application') {
+      message = 'Port $port is already being used by "$conflictingApp".\n\nZipline cannot start the file transfer service on this port.';
+      
+      if (conflictingApp.toLowerCase().contains('zipline')) {
+        suggestion = 'Another instance of Zipline is already running. Please close the other instance and try again.';
+      } else if (conflictingApp.toLowerCase().contains('dukto') || conflictingApp.toLowerCase().contains('file transfer')) {
+        suggestion = 'Another file transfer application is using this port. Please close it and try again.';
+      } else {
+        suggestion = 'Please close "$conflictingApp" and try again.';
+      }
+    } else {
+      message = 'Port $port is already in use by another application.\n\nZipline cannot start the file transfer service on this port.';
+      suggestion = 'Please close any conflicting applications and try again.';
+    }
+    
     final result = await showDialog<String>(
       context: context,
       barrierDismissible: false,
       builder: (context) => NetworkWarningDialog(
         title: 'Port Conflict Detected',
-        message: conflictingApp != null
-            ? 'Port $port is already being used by "$conflictingApp".\n\nZipline cannot start the file transfer service on this port.'
-            : 'Port $port is already in use by another application.\n\nZipline cannot start the file transfer service on this port.',
-        suggestion: 'Try changing the port in settings or close the conflicting application.',
+        message: message,
+        suggestion: suggestion,
         canRetry: true,
-        canChangePort: true,
         onRetry: () => Navigator.of(context).pop('retry'),
-        onChangePort: () => Navigator.of(context).pop('change_port'),
       ),
     );
     return result;

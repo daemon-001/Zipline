@@ -9,10 +9,12 @@ import '../services/peer_discovery_service.dart';
 import '../services/file_transfer_service.dart';
 import '../services/progress_dialog_manager.dart';
 import '../services/network_utility.dart';
+import '../services/save_location_service.dart';
 import '../widgets/network_warning_dialog.dart';
 import '../widgets/top_notification.dart';
 import '../widgets/tab_bar_widget.dart';
 import '../widgets/user_profile_bar.dart';
+import '../widgets/transfer_request_dialog.dart';
 import 'buddies_page.dart';
 import 'recent_page.dart';
 import 'about_page.dart';
@@ -31,11 +33,78 @@ class _MainScreenState extends State<MainScreen> {
   bool _showSettings = false;
   bool _showIpPage = false;
   Peer? _localPeer;
+  final SaveLocationService _saveLocationService = SaveLocationService();
 
   @override
   void initState() {
     super.initState();
     _initializeServices();
+  }
+
+  Future<void> _handleIncomingTransferRequest(Map<String, dynamic> requestData) async {
+    final senderPeer = requestData['senderPeer'] as Peer;
+    
+    // Get the best save location for this peer
+    await _saveLocationService.initialize();
+    final appState = Provider.of<AppStateProvider>(context, listen: false);
+    final defaultDownloadDir = appState.settings?.downloadDirectory ?? '';
+    
+    final currentSaveLocation = await _saveLocationService.getBestLocationForPeer(senderPeer.signature ?? senderPeer.name) ?? defaultDownloadDir;
+    
+    // Show the transfer request dialog
+    if (mounted) {
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => TransferRequestDialog(
+          requestData: requestData,
+          currentSaveLocation: currentSaveLocation,
+          onResponse: (accepted, saveLocation, remember, reason) async {
+            Navigator.of(context).pop();
+            
+            final peerDiscovery = Provider.of<PeerDiscoveryService>(context, listen: false);
+            final transferId = requestData['transferId'] as String;
+            
+            if (accepted && saveLocation != null) {
+              // If user chose to remember this location, save it as default location
+              if (remember) {
+                await _saveLocationService.setDefaultLocation(saveLocation);
+                
+                // Also update the app settings with the new default location
+                final appState = Provider.of<AppStateProvider>(context, listen: false);
+                if (appState.settings != null) {
+                  final settings = appState.settings!;
+                  final updatedSettings = settings.copyWith(destPath: saveLocation);
+                  appState.updateSettings(updatedSettings);
+                }
+              }
+              
+              // Register the incoming transfer with the file transfer service
+              final fileTransferService = Provider.of<FileTransferService>(context, listen: false);
+              fileTransferService.registerIncomingTransfer(
+                transferId: transferId,
+                senderAddress: senderPeer.address,
+                customSaveLocation: saveLocation != currentSaveLocation ? saveLocation : null,
+              );
+              
+              // Send acceptance
+              peerDiscovery.sendTransferAccept(
+                targetPeer: senderPeer,
+                transferId: transferId,
+                saveLocation: saveLocation,
+              );
+            } else {
+              // Send decline
+              peerDiscovery.sendTransferDecline(
+                targetPeer: senderPeer,
+                transferId: transferId,
+                reason: reason ?? 'User declined the transfer',
+              );
+            }
+          },
+        ),
+      );
+    }
   }
 
   @override
@@ -63,26 +132,36 @@ class _MainScreenState extends State<MainScreen> {
       
       // Check port availability before starting services
       if (mounted) {
-        final portCheck = await fileTransfer.checkPortAvailability(settings.port);
-        
-        if (!portCheck['available']) {
-          final result = await NetworkWarningDialog.showPortConflictDialog(
-            context: context,
-            port: settings.port,
-            conflictingApp: portCheck['conflictingApp'],
-          );
+        bool portAvailable = false;
+        while (!portAvailable) {
+          final portCheck = await fileTransfer.checkPortAvailability(AppSettings.port);
           
-          if (result == 'change_port') {
-            // Navigate to settings to change port
-            Navigator.of(context).push(
-              MaterialPageRoute(builder: (context) => SettingsPage(onBack: () => Navigator.of(context).pop())),
+          if (portCheck['available']) {
+            portAvailable = true;
+          } else {
+            final result = await NetworkWarningDialog.showPortConflictDialog(
+              context: context,
+              port: AppSettings.port,
+              conflictingApp: portCheck['conflictingApp'],
             );
-            return;
-          } else if (result != 'retry') {
-            // User cancelled or chose not to continue
-            return;
+            
+            if (result == 'change_port') {
+              // Port cannot be changed - show error message
+              if (mounted) {
+                await NetworkWarningDialog.showNetworkErrorDialog(
+                  context: context,
+                  error: 'Port ${AppSettings.port} is in use by another application',
+                  suggestion: 'Please close the conflicting application and restart Zipline, or try again later.',
+                  canRetry: true,
+                );
+              }
+              return;
+            } else if (result != 'retry') {
+              // User cancelled or chose not to continue
+              return;
+            }
+            // If retry, loop back to check port again
           }
-          // If retry, continue with initialization
         }
       }
       
@@ -101,7 +180,7 @@ class _MainScreenState extends State<MainScreen> {
       
       // Start peer discovery service
       final discoveryStarted = await peerDiscovery.start(
-        port: settings.port,
+        port: AppSettings.port,
         buddyName: settings.buddyName,
         platform: 'Windows',
       );
@@ -123,14 +202,14 @@ class _MainScreenState extends State<MainScreen> {
       fileTransfer.initialize();
       
       // Start file transfer server
-      final transferStarted = await fileTransfer.startServer(port: settings.port);
+      final transferStarted = await fileTransfer.startServer(port: AppSettings.port);
       if (!transferStarted) {
         // Show error dialog if server failed to start after port check passed
         if (mounted) {
           await NetworkWarningDialog.showNetworkErrorDialog(
             context: context,
-            error: 'Failed to start file transfer server on port ${settings.port}',
-            suggestion: 'The port may have been taken by another application since the initial check. Try restarting the app or changing the port in settings.',
+            error: 'Failed to start file transfer server on port ${AppSettings.port}',
+            suggestion: 'The port may have been taken by another application since the initial check. Try restarting the app.',
             canRetry: true,
           );
         }
@@ -174,6 +253,13 @@ class _MainScreenState extends State<MainScreen> {
         // Update progress dialog to show failure (don't auto-close)
         if (mounted) {
           ProgressDialogManager.instance.updateProgress(session);
+        }
+      });
+
+      // Listen for incoming transfer requests
+      peerDiscovery.onTransferRequest.listen((requestData) {
+        if (mounted) {
+          _handleIncomingTransferRequest(requestData);
         }
       });
 
@@ -354,9 +440,10 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // BUGFIX: Monitor network interfaces for changes
+  // BUGFIX: Monitor network interfaces for changes  
+  // Reduced frequency since PeerDiscoveryService now has its own network watcher
   void _startNetworkMonitoring(PeerDiscoveryService peerDiscovery) {
-    Timer.periodic(const Duration(seconds: 30), (timer) async {
+    Timer.periodic(const Duration(minutes: 2), (timer) async {
       try {
         // Check if network interfaces have changed
         final currentInterfaces = await NetworkInterface.list(
@@ -364,11 +451,14 @@ class _MainScreenState extends State<MainScreen> {
           includeLinkLocal: true,
         );
         
-        // Simple heuristic: if interface count changed significantly, refresh peers
-        if (currentInterfaces.length != _lastInterfaceCount) {
+        // Only trigger refresh on significant changes (more than 1 interface difference)
+        final interfaceCountDiff = (currentInterfaces.length - _lastInterfaceCount).abs();
+        if (_lastInterfaceCount > 0 && interfaceCountDiff > 1) {
           _lastInterfaceCount = currentInterfaces.length;
-          // Refresh neighbors to discover new peers
+          // Use smart refresh that doesn't immediately clear peers
           await peerDiscovery.refreshNeighbors();
+        } else {
+          _lastInterfaceCount = currentInterfaces.length;
         }
       } catch (e) {
         // Silently handle network monitoring errors
@@ -383,7 +473,7 @@ class _MainScreenState extends State<MainScreen> {
       id: 'local',
       name: settings.buddyName,
       address: '127.0.0.1', // Will be updated with actual IP
-      port: settings.port,
+      port: AppSettings.port,
       platform: 'Windows',
       system: 'Local',
       lastSeen: DateTime.now(),

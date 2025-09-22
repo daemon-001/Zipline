@@ -20,7 +20,6 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late TextEditingController _nameController;
-  late TextEditingController _portController;
   late TextEditingController _pathController;
   bool _showNotifications = true;
   bool _startMinimized = false;
@@ -30,7 +29,6 @@ class _SettingsPageState extends State<SettingsPage> {
   
   // Original values for change detection
   late String _originalName;
-  late String _originalPort;
   late String _originalPath;
   late bool _originalShowNotifications;
   late bool _originalStartMinimized;
@@ -42,20 +40,17 @@ class _SettingsPageState extends State<SettingsPage> {
     final settings = Provider.of<AppStateProvider>(context, listen: false).settings;
     
     // Initialize current values
-    final name = settings?.buddyName ?? SystemInfo.getSystemSignature();
-    final port = settings?.port.toString() ?? '6442';
+    final name = settings?.buddyName ?? SystemInfo.getSystemHostname();
     final path = settings?.destPath ?? '';
     _showNotifications = settings?.showNotifications ?? true;
     _startMinimized = settings?.startMinimized ?? false;
     _selectedTheme = settings?.theme ?? AppTheme.system;
     
     _nameController = TextEditingController(text: name);
-    _portController = TextEditingController(text: port);
     _pathController = TextEditingController(text: path);
     
     // Store original values
     _originalName = name;
-    _originalPort = port;
     _originalPath = path;
     _originalShowNotifications = _showNotifications;
     _originalStartMinimized = _startMinimized;
@@ -63,7 +58,6 @@ class _SettingsPageState extends State<SettingsPage> {
     
     // Add listeners for change detection
     _nameController.addListener(_checkForChanges);
-    _portController.addListener(_checkForChanges);
     _pathController.addListener(_checkForChanges);
     
     _initializeDefaultPath();
@@ -77,7 +71,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   bool get _hasChanges {
     return _nameController.text != _originalName ||
-           _portController.text != _originalPort ||
            _pathController.text != _originalPath ||
            _showNotifications != _originalShowNotifications ||
            _startMinimized != _originalStartMinimized ||
@@ -110,7 +103,6 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _nameController.dispose();
-    _portController.dispose();
     _pathController.dispose();
     super.dispose();
   }
@@ -212,21 +204,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       'Buddy Name',
                       _nameController,
                       'Your name visible to others',
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 24),
-                
-                // Network settings
-                _buildSection(
-                  'Network Settings',
-                  [
-                    _buildTextField(
-                      'Port',
-                      _portController,
-                      'Network port for communication',
-                      keyboardType: TextInputType.number,
                     ),
                   ],
                 ),
@@ -781,21 +758,6 @@ class _SettingsPageState extends State<SettingsPage> {
     
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     
-    // Validate port
-    final port = int.tryParse(_portController.text);
-    if (port == null || port < 1 || port > 65535) {
-      setState(() {
-        _isSaving = false;
-      });
-      TopNotification.show(
-        context,
-        title: 'Invalid Port Number',
-        message: 'Please enter a valid port number (1-65535)',
-        type: NotificationType.error,
-      );
-      return;
-    }
-    
     // Validate buddy name
     if (_nameController.text.trim().isEmpty) {
       setState(() {
@@ -814,13 +776,12 @@ class _SettingsPageState extends State<SettingsPage> {
     await Future.delayed(const Duration(milliseconds: 800));
     
     final currentSettings = appState.settings ?? AppSettings(
-      buddyName: SystemInfo.getSystemSignature(),
+      buddyName: SystemInfo.getSystemHostname(),
       destPath: '',
     );
     
     final newSettings = currentSettings.copyWith(
       buddyName: _nameController.text.trim(),
-      port: port,
       destPath: _pathController.text.trim(),
       showNotifications: _showNotifications,
       startMinimized: _startMinimized,
@@ -1092,7 +1053,7 @@ class _SettingsPageState extends State<SettingsPage> {
       });
       
       buffer.writeln('\n=== Troubleshooting Tips ===');
-      buffer.writeln('• Make sure Windows Firewall allows Zipline on port ${_portController.text}');
+      buffer.writeln('• Make sure Windows Firewall allows Zipline on port 6442');
       buffer.writeln('• Ensure both devices are on the same network');
       buffer.writeln('• Try disabling antivirus temporarily if transfers fail');
       buffer.writeln('• Check if target device has Zipline running');

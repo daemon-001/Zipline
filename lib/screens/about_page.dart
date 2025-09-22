@@ -31,11 +31,6 @@ class AboutPage extends StatelessWidget {
           
           const SizedBox(height: 32),
           
-          // Security notice
-          _buildSecurityNotice(theme),
-          
-          const SizedBox(height: 24),
-          
           // Footer
           _buildFooter(theme),
           
@@ -282,7 +277,6 @@ class AboutPage extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               _buildInfoRow('Device Name', appState.settings?.buddyName ?? 'Unknown', theme),
-              _buildInfoRow('Port', appState.settings?.port.toString() ?? '6442', theme),
               _buildInfoRow('Platform', 'Windows', theme),
               _buildInfoRow('Destination', 
                   (appState.settings?.destPath ?? '').isEmpty
@@ -292,66 +286,6 @@ class AboutPage extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildSecurityNotice(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            theme.colorScheme.tertiary.withOpacity(0.1),
-            theme.colorScheme.tertiary.withOpacity(0.05),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: theme.colorScheme.tertiary.withOpacity(0.3),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.tertiary.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              Icons.security,
-              color: theme.colorScheme.tertiary,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Security Notice',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: theme.colorScheme.tertiary,
-                    fontFamily: 'Klill',
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Zipline transfers files without encryption. Only use in trusted networks.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.tertiary,
-                    fontFamily: 'LiberationSans',
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 

@@ -8,25 +8,39 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/peer.dart';
 import '../models/transfer_item.dart';
 import '../models/transfer_session.dart';
+import '../utils/speed_calculator.dart';
 import '../models/app_settings.dart';
 import 'peer_discovery_service.dart';
+import 'network_utility.dart';
 
 /// File transfer service implementation
 class FileTransferService extends ChangeNotifier {
-  // Transfer constants
-  static const int bufferSize = 1024 * 1024; // 1MB buffer for optimal performance
-  static const String textElementName = '___ZIPLINE___TEXT___'; // Text element identifier
+  static const int bufferSize = 1024 * 1024;
+  static const int maxSocketBufferSize = 1024 * 1024;
+  static const int progressUpdateInterval = 256 * 1024; 
+  static const String textElementName = '___ZIPLINE___TEXT___';
   static const String _historyKey = 'zipline_transfer_history';
 
   ServerSocket? _serverSocket;
   final Map<String, TransferSession> _activeSessions = {};
   final Map<String, TransferSession> _completedSessions = {};
+  
+  final Map<String, TransferSession> _pendingRequests = {};
+  final Map<String, Completer<bool>> _transferRequestCompleters = {};
+  
+  final Map<String, SpeedCalculator> _speedCalculators = {};
+  
+  final Map<String, Map<String, String>> _sessionPathMappings = {};
+  
+  final Map<String, String> _sessionSaveLocations = {};
+  
+  final Map<String, String> _senderAddressToTransferId = {};
+  
   AppSettings? _settings;
   PeerDiscoveryService? _peerDiscovery;
   int _listenPort = 6442;
   SharedPreferences? _prefs;
 
-  // Stream controllers for session events
   final StreamController<TransferSession> _sessionStartedController = 
       StreamController<TransferSession>.broadcast();
   final StreamController<TransferSession> _sessionProgressController = 
@@ -35,26 +49,25 @@ class FileTransferService extends ChangeNotifier {
       StreamController<TransferSession>.broadcast();
   final StreamController<TransferSession> _sessionFailedController = 
       StreamController<TransferSession>.broadcast();
+  final StreamController<String> _transferRequestRejectedController = 
+      StreamController<String>.broadcast();
 
-  // Public streams
   Stream<TransferSession> get onSessionStarted => _sessionStartedController.stream;
   Stream<TransferSession> get onSessionProgress => _sessionProgressController.stream;
   Stream<TransferSession> get onSessionCompleted => _sessionCompletedController.stream;
   Stream<TransferSession> get onSessionFailed => _sessionFailedController.stream;
+  Stream<String> get onTransferRequestRejected => _transferRequestRejectedController.stream;
 
-  // Public getters
   Map<String, TransferSession> get activeSessions => Map.unmodifiable(_activeSessions);
   Map<String, TransferSession> get completedSessions => Map.unmodifiable(_completedSessions);
   int get historyCount => _completedSessions.length;
 
-  // Clear all history
   void clearHistory() async {
     _completedSessions.clear();
     await _saveHistory();
     notifyListeners();
   }
 
-  // Cancel transfer
   void cancelTransfer(String sessionId) {
     final session = _activeSessions[sessionId];
     if (session != null) {
@@ -67,17 +80,25 @@ class FileTransferService extends ChangeNotifier {
     }
   }
 
-  // Initialize method (compatibility)
   Future<void> initialize() async {
     try {
       _prefs = await SharedPreferences.getInstance();
       await _loadHistory();
     } catch (e) {
-      // Continue without history if loading fails
+    }
+  }
+  
+  void registerIncomingTransfer({
+    required String transferId,
+    required String senderAddress,
+    String? customSaveLocation,
+  }) {
+    _senderAddressToTransferId[senderAddress] = transferId;
+    if (customSaveLocation != null) {
+      _sessionSaveLocations[transferId] = customSaveLocation;
     }
   }
 
-  // Check port availability (compatibility) 
   Future<Map<String, dynamic>> checkPortAvailability(int port) async {
     try {
       final serverSocket = await ServerSocket.bind(InternetAddress.anyIPv4, port);
@@ -87,14 +108,14 @@ class FileTransferService extends ChangeNotifier {
         'conflictingApp': null,
       };
     } catch (e) {
+      final conflictingApp = await NetworkUtility.getPortUsage(port);
       return {
         'available': false,
-        'conflictingApp': 'Unknown application',
+        'conflictingApp': conflictingApp ?? 'Unknown application',
       };
     }
   }
 
-  // Send text method (compatibility)
   Future<bool> sendText(Peer peer, String text) async {
     final textItem = TransferItem(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -109,7 +130,6 @@ class FileTransferService extends ChangeNotifier {
     return await sendFiles(peer, [textItem]);
   }
 
-  // Get network diagnostics (compatibility)
   Map<String, dynamic> getNetworkDiagnostics() {
     return {
       'service': 'Zipline File Transfer',
@@ -126,9 +146,30 @@ class FileTransferService extends ChangeNotifier {
 
   void setPeerDiscovery(PeerDiscoveryService peerDiscovery) {
     _peerDiscovery = peerDiscovery;
+    
+    _peerDiscovery!.onTransferResponse.listen((responseData) {
+      final transferId = responseData['transferId'] as String?;
+      final responseType = responseData['responseType'] as String?;
+      
+      if (transferId != null) {
+        final completer = _transferRequestCompleters.remove(transferId);
+        if (completer != null && !completer.isCompleted) {
+          if (responseType == 'accept') {
+            final saveLocation = responseData['data'] as String?;
+            if (saveLocation != null && _pendingRequests.containsKey(transferId)) {
+              _sessionSaveLocations[transferId] = saveLocation;
+            }
+            completer.complete(true);
+          } else {
+            final reason = responseData['data'] as String? ?? 'Transfer declined';
+            _transferRequestRejectedController.add(reason);
+            completer.complete(false);
+          }
+        }
+      }
+    });
   }
 
-  // Start server
   Future<bool> startServer({int? port}) async {
     try {
       if (port != null) _listenPort = port;
@@ -142,28 +183,23 @@ class FileTransferService extends ChangeNotifier {
     }
   }
 
-  // Stop server  
   void stopServer() {
     _serverSocket?.close();
     _serverSocket = null;
   }
 
-  // Send files with proper directory handling
   Future<bool> sendFiles(Peer peer, List<TransferItem> items) async {
     try {
-      // Validate input
       if (items.isEmpty) return false;
       
-      // Process items for transfer
       final processedItems = <TransferItem>[];
       int totalSize = 0;
       
       for (final item in items) {
         if (item.type == TransferType.file || item.type == TransferType.folder) {
           if (item.path == null || item.path!.isEmpty) continue;
-          // Process directory or file
           final result = await _processTransferPath(item.path!, processedItems);
-          totalSize += result; // Add size returned from processing
+          totalSize += result;
         } else if (item.type == TransferType.text) {
           if (item.textContent == null || item.textContent!.isEmpty) continue;
           processedItems.add(item);
@@ -171,13 +207,12 @@ class FileTransferService extends ChangeNotifier {
         }
       }
       
-      // Ensure we have items to transfer
       if (processedItems.isEmpty) return false;
 
       final session = TransferSession(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         peer: peer,
-        items: processedItems, // Use processed items with directories
+        items: processedItems,
         totalSize: totalSize,
         totalFiles: processedItems.length,
         direction: TransferDirection.sending,
@@ -186,110 +221,169 @@ class FileTransferService extends ChangeNotifier {
         transferredSize: 0,
       );
 
+      _pendingRequests[session.id] = session;
       _activeSessions[session.id] = session;
       _sessionStartedController.add(session);
       notifyListeners();
 
-      await _performTransferSend(session);
-      return true;
+      if (_peerDiscovery != null) {
+        final fileNames = processedItems.map((item) => item.name).toList();
+        final description = _generateTransferDescription(processedItems);
+        
+        _peerDiscovery!.sendTransferRequest(
+          targetPeer: peer,
+          transferId: session.id,
+          totalFiles: processedItems.length,
+          totalSize: totalSize,
+          transferDescription: description,
+          fileNames: fileNames,
+        );
+
+        final completer = Completer<bool>();
+        _transferRequestCompleters[session.id] = completer;
+        
+        Timer(const Duration(seconds: 30), () {
+          if (!completer.isCompleted) {
+            _transferRequestCompleters.remove(session.id);
+            completer.complete(false);
+          }
+        });
+        
+        final waitingSession = session.copyWith(status: TransferStatus.waitingForAcceptance);
+        _activeSessions[session.id] = waitingSession;
+        _sessionProgressController.add(waitingSession);
+        notifyListeners();
+
+        final accepted = await completer.future;
+        
+        if (accepted) {
+          await _performTransferSend(session);
+          return true;
+        } else {
+          final rejectedSession = session.copyWith(
+            status: TransferStatus.cancelled,
+            error: 'Transfer request was rejected or timed out',
+            completedAt: DateTime.now(),
+          );
+          _sessionFailedController.add(rejectedSession);
+          _moveToCompleted(rejectedSession);
+          return false;
+        }
+      } else {
+        await _performTransferSend(session);
+        return true;
+      }
     } catch (e) {
       return false;
     }
   }
 
-  // Transfer: Process path like FileData::processDir with relative paths  
+  String _generateTransferDescription(List<TransferItem> items) {
+    if (items.length == 1) {
+      final item = items.first;
+      if (item.type == TransferType.text) {
+        return 'Text message';
+      } else {
+        return item.name;
+      }
+    } else {
+      final fileCount = items.where((item) => item.type == TransferType.file).length;
+      final folderCount = items.where((item) => item.type == TransferType.folder).length;
+      final textCount = items.where((item) => item.type == TransferType.text).length;
+      
+      final parts = <String>[];
+      if (fileCount > 0) parts.add('$fileCount ${fileCount == 1 ? 'file' : 'files'}');
+      if (folderCount > 0) parts.add('$folderCount ${folderCount == 1 ? 'folder' : 'folders'}');
+      if (textCount > 0) parts.add('$textCount text ${textCount == 1 ? 'message' : 'messages'}');
+      
+      return parts.join(', ');
+    }
+  }
+
   Future<int> _processTransferPath(String fullPath, List<TransferItem> list, [String? relPath]) async {
     int totalSize = 0;
     
-    // Validate input
     if (fullPath.isEmpty) return 0;
     
-    // Transfer: First call uses filename only, recursive calls build relative path
     relPath ??= path.basename(fullPath);
     
-    // Transfer: Use FileStat like QFileInfo to handle both files and directories safely
     final FileStat stat;
     try {
       stat = await FileStat.stat(fullPath);
     } catch (e) {
-      // Skip files/directories that can't be accessed
       return 0;
     }
     
     if (stat.type == FileSystemEntityType.directory) {
-      // Transfer: Directory processing - append with size -1 and relative path
       list.add(TransferItem(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         type: TransferType.folder,
         path: fullPath,
-        name: relPath, // Use relative path
-        size: -1, // Transfer: Directories have size -1
+        name: relPath,
+        size: -1,
         status: TransferStatus.pending,
         createdAt: DateTime.now(),
       ));
       
-      // Transfer: Recursive processing like QDir().entryList()
       try {
         final dirInfo = Directory(fullPath);
         await for (final entity in dirInfo.list(recursive: false, followLinks: false)) {
           final entryName = path.basename(entity.path);
-          // Transfer: Build relative path like "relPath + "/" + entry" (always use forward slash)
           final childRelPath = relPath + "/" + entryName;
           final childSize = await _processTransferPath(entity.path, list, childRelPath);
-          totalSize += childSize; // Accumulate child sizes (directories contribute 0)
+          totalSize += childSize;
         }
       } catch (e) {
-        // Silently handle directory processing errors
       }
     } else if (stat.type == FileSystemEntityType.file) {
-      // Transfer: File processing - append with actual size and relative path
       final fileSize = stat.size;
       
       list.add(TransferItem(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         type: TransferType.file,
         path: fullPath,
-        name: relPath, // Use relative path  
+        name: relPath,  
         size: fileSize,
         status: TransferStatus.pending,
         createdAt: DateTime.now(),
       ));
       
-      totalSize = fileSize; // File contributes its size
+      totalSize = fileSize;
     }
     
-    return totalSize; // Return accumulated size
+    return totalSize;
   }
 
-  // Transfer: Send files using sender.cpp methodology
   Future<void> _performTransferSend(TransferSession session) async {
     Socket? socket;
     
     try {
-      // Validate peer information
       if (session.peer.address.isEmpty || session.peer.port <= 0) {
         throw Exception('Invalid peer address or port');
       }
       
-      // Transfer: Find the best local interface to reach this peer
       final localInterface = await _findBestLocalInterface(session.peer.address);
       
-      // Transfer: Connect like sender.cpp - socket->connectToHost(dest, port)
       try {
         if (localInterface != null) {
           socket = await Socket.connect(
             session.peer.address, 
             session.peer.port,
             sourceAddress: InternetAddress(localInterface),
-          ).timeout(const Duration(seconds: 10)); // Add timeout
+          ).timeout(const Duration(seconds: 10));
         } else {
           socket = await Socket.connect(
             session.peer.address, 
             session.peer.port,
-          ).timeout(const Duration(seconds: 10)); // Add timeout
+          ).timeout(const Duration(seconds: 10));
         }
         
         socket.setOption(SocketOption.tcpNoDelay, true);
+        try {
+          socket.setRawOption(RawSocketOption.fromInt(6, 7, 2 * 1024 * 1024)); // TCP_SNDBUF - 2MB
+          socket.setRawOption(RawSocketOption.fromInt(6, 8, 2 * 1024 * 1024)); // TCP_RCVBUF - 2MB
+        } catch (e) {
+        }
         } catch (e) {
         final failedSession = session.copyWith(
           status: TransferStatus.failed,
@@ -301,20 +395,22 @@ class FileTransferService extends ChangeNotifier {
         return;
       }
       
-      final updatedSession = session.copyWith(status: TransferStatus.inProgress);
-          _activeSessions[session.id] = updatedSession;
-          _sessionProgressController.add(updatedSession);
+      final updatedSession = session.copyWith(
+        status: TransferStatus.inProgress,
+        actualDataTransferStartedAt: DateTime.now(), // Mark when actual data transfer begins
+      );
+      _activeSessions[session.id] = updatedSession;
+      _sessionProgressController.add(updatedSession);
 
-      // Transfer PHASE 1: Send total elements count
+      _speedCalculators[session.id] = SpeedCalculator();
+
       final totalElements = session.items.length;
       socket.add(_int64ToBytes(totalElements));
       
-      // Transfer PHASE 2: Send total size  
       socket.add(_int64ToBytes(session.totalSize));
       
       int totalBytesSent = 0;
       
-      // Transfer PHASE 3: Send each element
       for (int i = 0; i < session.items.length; i++) {
         final item = session.items[i];
         
@@ -323,22 +419,26 @@ class FileTransferService extends ChangeNotifier {
         } else if (item.type == TransferType.file) {
           totalBytesSent += await _sendFileElement(socket, item.path!, item.name, session, totalBytesSent);
         } else if (item.type == TransferType.folder) {
-          // Transfer: Send directory like FileData with size -1
           totalBytesSent += await _sendDirectoryElement(socket, item.path!, item.name, session, totalBytesSent);
         }
         
-        // Transfer: Small delay to prevent buffer overflow (simulate bytesToWrite check)
-        await Future.delayed(Duration(microseconds: 100));
       }
       
-      // Transfer: Wait for all data to be sent
       await socket.flush();
+      
+      await Future.delayed(Duration(milliseconds: 100));
+      
+      final speedCalculator = _speedCalculators[session.id];
+      final finalSpeed = speedCalculator?.getAverageSpeed(
+        session.actualDataTransferStartedAt ?? session.startedAt
+      ) ?? 0.0;
       
       final completedSession = session.copyWith(
         status: TransferStatus.completed,
         completedAt: DateTime.now(),
         transferredSize: session.totalSize,
         completedFiles: session.items.length,
+        currentSpeed: finalSpeed,
       );
       
       _sessionCompletedController.add(completedSession);
@@ -358,102 +458,147 @@ class FileTransferService extends ChangeNotifier {
     }
   }
 
-  // Transfer: Send file element with buffer control and proper progress
   Future<int> _sendFileElement(Socket socket, String filePath, String elementName, TransferSession session, int totalBytesSent) async {
     final file = File(filePath);
     
-    // Transfer: Use FileStat like QFileInfo for safer size reading
     final stat = await FileStat.stat(filePath);
     final fileSize = stat.size;
     
-    // Transfer: Send element name + null terminator + size (use elementName, not filename!)
     final nameBytes = utf8.encode(elementName);
     socket.add(nameBytes);
-    socket.add([0]); // null terminator
+    socket.add([0]);
     socket.add(_int64ToBytes(fileSize));
     
-    // Transfer: Send file data in 1MB chunks with buffer control
     int fileBytesRead = 0;
+    int fileBytesActuallySent = 0;
+    int lastProgressUpdate = 0;
     final fileHandle = await file.open();
     
     try {
       while (fileBytesRead < fileSize) {
-        // Transfer: Read up to 1MB at a time
+        await _implementFlowControl(socket, totalBytesSent);
+        
         final chunkSize = (fileSize - fileBytesRead).clamp(0, bufferSize);
         final chunk = await fileHandle.read(chunkSize);
         
         if (chunk.isEmpty) break;
         
-        // Transfer: Write data first
-          socket.add(chunk);
+        socket.add(chunk);
         fileBytesRead += chunk.length;
-          totalBytesSent += chunk.length;
-          
-        // Transfer: Flush to actually send data to network
-        await socket.flush();
         
-        // Transfer: Update progress AFTER data is actually sent (like original)
-        final progressSession = _activeSessions[session.id];
-        if (progressSession != null) {
-          final updated = progressSession.copyWith(
-          transferredSize: totalBytesSent,
-        );
-          _activeSessions[session.id] = updated;
-          _sessionProgressController.add(updated);
+        await socket.flush();
+        fileBytesActuallySent = fileBytesRead;
+        totalBytesSent += chunk.length;
+        
+        if (fileBytesActuallySent - lastProgressUpdate >= progressUpdateInterval || 
+            fileBytesRead >= fileSize) {
+          final progressSession = _activeSessions[session.id];
+          if (progressSession != null) {
+            final safeTransferredSize = totalBytesSent.clamp(0, session.totalSize);
+            final now = DateTime.now();
+            
+            final speedCalculator = _speedCalculators[session.id];
+            if (speedCalculator != null) {
+              if (lastProgressUpdate == 0) {
+                speedCalculator.initializeWithProgress(safeTransferredSize, now);
+              } else {
+                speedCalculator.recordProgress(safeTransferredSize, now);
+              }
+              
+              final currentSpeed = speedCalculator.getCurrentSpeed(
+                progressSession.actualDataTransferStartedAt ?? progressSession.startedAt
+              );
+              
+              final updated = progressSession.copyWith(
+                transferredSize: safeTransferredSize,
+                currentSpeed: currentSpeed,
+              );
+              _activeSessions[session.id] = updated;
+              _sessionProgressController.add(updated);
+              notifyListeners();
+            }
+            lastProgressUpdate = fileBytesActuallySent;
+          }
+        }
+      }
+      
+      final progressSession = _activeSessions[session.id];
+      if (progressSession != null) {
+        final safeTransferredSize = totalBytesSent.clamp(0, session.totalSize);
+        final updated = progressSession.copyWith(transferredSize: safeTransferredSize);
+        _activeSessions[session.id] = updated;
+        _sessionProgressController.add(updated);
         notifyListeners();
       }
       
-        // Transfer: Small delay after each chunk to allow network transmission
-        await Future.delayed(Duration(milliseconds: 10));
-      }
     } finally {
       await fileHandle.close();
     }
     
     return fileBytesRead;
   }
+  
+  Future<void> _implementFlowControl(Socket socket, int totalBytesSent) async {
+    
+    if (totalBytesSent > 50 * 1024 * 1024) {
+      return;
+    } else if (totalBytesSent > 10 * 1024 * 1024) {
+      await Future.delayed(Duration(microseconds: 100));
+    } else {
+      await Future.delayed(Duration(microseconds: 500));
+    }
+  }
 
-  // Transfer: Send text element with buffer control
   Future<int> _sendTextElement(Socket socket, String text, TransferSession session, int totalBytesSent) async {
     final textBytes = utf8.encode(text);
     
-    // Transfer: Send text element name + null terminator + size
     final nameBytes = utf8.encode(textElementName);
-          socket.add(nameBytes);
-    socket.add([0]); // null terminator  
+    socket.add(nameBytes);
+    socket.add([0]);  
     socket.add(_int64ToBytes(textBytes.length));
     
-    // Transfer: Send text data with proper progress timing
     socket.add(textBytes);
-    await socket.flush(); // Transfer: Flush to actually send
+    await socket.flush();
     
-    // Transfer: Update progress AFTER data is sent
+    await Future.delayed(Duration(milliseconds: 10));
+    
     totalBytesSent += textBytes.length;
     final progressSession = _activeSessions[session.id];
     if (progressSession != null) {
-      final updated = progressSession.copyWith(
-        transferredSize: totalBytesSent,
-      );
-      _activeSessions[session.id] = updated;
-      _sessionProgressController.add(updated);
-      notifyListeners();
+      final safeTransferredSize = totalBytesSent.clamp(0, session.totalSize);
+      final now = DateTime.now();
+      
+      final speedCalculator = _speedCalculators[session.id];
+      if (speedCalculator != null) {
+        speedCalculator.recordProgress(safeTransferredSize, now);
+        
+        final currentSpeed = speedCalculator.getCurrentSpeed(
+          progressSession.actualDataTransferStartedAt ?? progressSession.startedAt
+        );
+        
+        final updated = progressSession.copyWith(
+          transferredSize: safeTransferredSize,
+          currentSpeed: currentSpeed,
+        );
+        _activeSessions[session.id] = updated;
+        _sessionProgressController.add(updated);
+        notifyListeners();
+      }
     }
     
     return textBytes.length;
   }
 
-  // Transfer: Send directory element (like FileData with size -1)
   Future<int> _sendDirectoryElement(Socket socket, String dirPath, String elementName, TransferSession session, int totalBytesSent) async {
-    // Transfer: Send element name + null terminator + size (-1 for directories)
     final nameBytes = utf8.encode(elementName);
-            socket.add(nameBytes);
-    socket.add([0]); // null terminator
-    socket.add(_int64ToBytes(-1)); // Transfer: Directory size is -1
+    socket.add(nameBytes);
+    socket.add([0]);
+    socket.add(_int64ToBytes(-1));
     
-    // No data for directories
-            await socket.flush();
+    await socket.flush();
     
-    // Update progress (directories don't add to transferred bytes, just element count)
+    await Future.delayed(Duration(milliseconds: 5));
+    
     final progressSession = _activeSessions[session.id];
     if (progressSession != null) {
       final updated = progressSession.copyWith(
@@ -464,21 +609,31 @@ class FileTransferService extends ChangeNotifier {
       notifyListeners();
     }
     
-    return 0; // Transfer: Directories contribute 0 bytes to transfer
+    return 0;
   }
 
-  // Transfer RECEIVING METHOD
+  // RECEIVING METHOD - Optimized for high performance
   void _onIncomingConnection(Socket socket) {
-    // Transfer: Configure socket
+    // Configure socket for maximum performance
     socket.setOption(SocketOption.tcpNoDelay, true);
+    // Set larger buffer sizes for high-speed transfers
+    try {
+      socket.setRawOption(RawSocketOption.fromInt(6, 7, 2 * 1024 * 1024)); // TCP_SNDBUF - 2MB
+      socket.setRawOption(RawSocketOption.fromInt(6, 8, 2 * 1024 * 1024)); // TCP_RCVBUF - 2MB  
+    } catch (e) {
+      // Platform doesn't support buffer size configuration
+    }
     
     _handleTransferReceive(socket);
   }
 
   // Transfer RECEIVE - Streaming with immediate processing
   Future<void> _handleTransferReceive(Socket socket) async {
-    final sessionId = DateTime.now().millisecondsSinceEpoch.toString();
     final senderAddress = socket.remoteAddress.address;
+    
+    // Look up the original transfer ID from the sender address
+    final originalTransferId = _senderAddressToTransferId[senderAddress];
+    final sessionId = originalTransferId ?? DateTime.now().millisecondsSinceEpoch.toString();
     
     // Validate sender address
     if (senderAddress.isEmpty) {
@@ -492,6 +647,7 @@ class FileTransferService extends ChangeNotifier {
     int totalElements = 0;
     int totalSize = 0;
     int totalReceivedData = 0;
+    int lastProgressUpdate = 0; // For optimized progress tracking
     
     String currentFileName = '';
     int currentFileSize = 0;
@@ -534,14 +690,18 @@ class FileTransferService extends ChangeNotifier {
               session = TransferSession(
                 id: sessionId,
                   peer: senderPeer,
-                items: [],
+                items: [], // Will be populated as files are received
                   totalSize: totalSize,
                   totalFiles: totalElements,
                 direction: TransferDirection.receiving,
                 status: TransferStatus.inProgress,
                 startedAt: DateTime.now(),
+                actualDataTransferStartedAt: DateTime.now(), // Data transfer starts immediately for receiver
                 transferredSize: 0,
               );
+              
+              // Initialize speed calculator for receiving
+              _speedCalculators[sessionId] = SpeedCalculator();
               
               _activeSessions[sessionId] = session;
               _sessionStartedController.add(session);
@@ -578,12 +738,23 @@ class FileTransferService extends ChangeNotifier {
                 
                 if (currentFileSize == -1) {
                   // Transfer: DIRECTORY - create and move to next element (like receiver.cpp)
-                  await _createDirectory(currentFileName);
+                  await _createDirectory(currentFileName, sessionId);
                   currentElements++; // Like sessionElementsReceived++
                   
-                  // Transfer: Update progress for directories (like sessionElementsReceived++)
+                  // Add directory to session items
                   if (session != null) {
+                    final folderItem = TransferItem(
+                      id: '${sessionId}_${currentElements}_folder',
+                      name: currentFileName,
+                      type: TransferType.folder,
+                      size: 0,
+                      status: TransferStatus.completed,
+                      createdAt: DateTime.now(),
+                    );
+                    final updatedItems = List<TransferItem>.from(session!.items)..add(folderItem);
+                    
                     final updatedSession = session!.copyWith(
+                      items: updatedItems,
                       transferredSize: totalReceivedData,
                       completedFiles: currentElements,
                     );
@@ -599,12 +770,12 @@ class FileTransferService extends ChangeNotifier {
                     // Transfer: Break and continue processing next element
                     break;
                   } else {
-                    // Transfer: All elements received - endSession()
+                    // Transfer: All elements received - endSession() with 100% progress
                     final completedSession = session!.copyWith(
                         status: TransferStatus.completed,
                         completedAt: DateTime.now(),
                       completedFiles: currentElements,
-                      transferredSize: totalReceivedData,
+                      transferredSize: session!.totalSize, // Ensure receiver shows 100% at completion
                       );
                       _sessionCompletedController.add(completedSession);
                       _moveToCompleted(completedSession);
@@ -615,7 +786,7 @@ class FileTransferService extends ChangeNotifier {
                   recvStatus = 4; // Next: element data
               } else {
                   // FILE ELEMENT - open for writing
-                  final file = await _createFileForTransfer(currentFileName);
+                  final file = await _createFileForTransfer(currentFileName, sessionId);
                   currentFile = await file.open(mode: FileMode.write);
                   recvStatus = 4; // Next: element data
                 }
@@ -631,25 +802,47 @@ class FileTransferService extends ChangeNotifier {
                 final elementData = chunk.sublist(chunkIndex, chunkIndex + bytesToProcess);
                 chunkIndex += bytesToProcess;
                 
-                // Transfer: Write immediately like original
+                // Transfer: High-performance I/O - batch writes for better performance
                 if (currentFileName == textElementName) {
                   // Text element - could accumulate for processing
                 } else {
-                  // File element - write directly to disk
+                  // File element - write directly to disk (RandomAccessFile is already buffered)
                   await currentFile!.writeFrom(elementData);
                 }
                 
                 currentFileBytesReceived += bytesToProcess;
                 totalReceivedData += bytesToProcess;
                 
-                // Transfer: Update progress frequently like original  
-                  if (session != null) {
-                  final updated = session.copyWith(transferredSize: totalReceivedData);
-                  _activeSessions[sessionId] = updated;
-                  session = updated;
-                  _sessionProgressController.add(session);
+                // Update progress with synchronized timing
+                if (session != null && (totalReceivedData - lastProgressUpdate >= progressUpdateInterval || 
+                    currentFileBytesReceived >= currentFileSize)) {
+                  final safeTransferredSize = totalReceivedData.clamp(0, session.totalSize);
+                  final now = DateTime.now();
+                  
+                  // Update speed calculator with proper initialization
+                  final speedCalculator = _speedCalculators[sessionId];
+                  if (speedCalculator != null) {
+                    if (lastProgressUpdate == 0) {
+                      speedCalculator.initializeWithProgress(safeTransferredSize, now);
+                    } else {
+                      speedCalculator.recordProgress(safeTransferredSize, now);
+                    }
+                    
+                    final currentSpeed = speedCalculator.getCurrentSpeed(
+                      session.actualDataTransferStartedAt ?? session.startedAt
+                    );
+                    
+                    final updated = session.copyWith(
+                      transferredSize: safeTransferredSize,
+                      currentSpeed: currentSpeed,
+                    );
+                    _activeSessions[sessionId] = updated;
+                    session = updated;
+                    _sessionProgressController.add(session);
                     notifyListeners();
                   }
+                  lastProgressUpdate = totalReceivedData;
+                }
                 
                 // Element complete?
                 if (currentFileBytesReceived >= currentFileSize) {
@@ -658,21 +851,57 @@ class FileTransferService extends ChangeNotifier {
                     currentFile = null;
                   }
                   
+                  // Add completed element to session items
+                  if (session != null) {
+                    if (currentFileName == textElementName) {
+                      // Add text item
+                      final textItem = TransferItem(
+                        id: '${sessionId}_${currentElements}_text',
+                        name: 'Text message',
+                        type: TransferType.text,
+                        size: currentFileSize,
+                        status: TransferStatus.completed,
+                        createdAt: DateTime.now(),
+                        textContent: '', // Could be populated if needed
+                      );
+                      final updatedItems = List<TransferItem>.from(session!.items)..add(textItem);
+                      session = session!.copyWith(items: updatedItems);
+                    } else {
+                      // Add file item (directories are added when created)
+                      final fileItem = TransferItem(
+                        id: '${sessionId}_${currentElements}_file',
+                        name: currentFileName,
+                        type: TransferType.file,
+                        size: currentFileSize,
+                        status: TransferStatus.completed,
+                        createdAt: DateTime.now(),
+                      );
+                      final updatedItems = List<TransferItem>.from(session!.items)..add(fileItem);
+                      session = session!.copyWith(items: updatedItems);
+                    }
+                  }
+                  
                   currentElements++;
                   if (currentElements < totalElements) {
                     recvStatus = 2; // Next element name
                   } else {
-                    // All elements received - complete
+                    // All elements received - calculate final speed and complete
+                    final speedCalculator = _speedCalculators[sessionId];
+                    final finalSpeed = speedCalculator?.getAverageSpeed(
+                      session!.actualDataTransferStartedAt ?? session!.startedAt
+                    ) ?? 0.0;
+                    
                     final completedSession = session!.copyWith(
                       status: TransferStatus.completed,
                       completedAt: DateTime.now(),
                       completedFiles: currentElements,
-                      transferredSize: totalReceivedData,
+                      transferredSize: session!.totalSize, // Ensure 100% completion
+                      currentSpeed: finalSpeed,
                     );
                     _sessionCompletedController.add(completedSession);
                     _moveToCompleted(completedSession);
-                  return;
-                }
+                    return;
+                  }
               }
             }
               break;
@@ -700,57 +929,127 @@ class FileTransferService extends ChangeNotifier {
     }
   }
 
-  // Helper methods
-  Future<File> _createFileForTransfer(String fileName) async {
-    if (_settings?.downloadDirectory == null) {
+  /// Get a unique file path by adding (1), (2) etc. suffix if file already exists
+  String _getUniqueFilePath(String originalPath) {
+    final file = File(originalPath);
+    if (!file.existsSync()) {
+      return originalPath;
+    }
+
+    final dir = path.dirname(originalPath);
+    final fileName = path.basenameWithoutExtension(originalPath);
+    final extension = path.extension(originalPath);
+
+    int counter = 1;
+    String uniquePath;
+    
+    do {
+      final newFileName = '$fileName ($counter)$extension';
+      uniquePath = path.join(dir, newFileName);
+      counter++;
+    } while (File(uniquePath).existsSync());
+
+    return uniquePath;
+  }
+
+  /// Get a unique directory path by adding (1), (2) etc. suffix if directory already exists
+  String _getUniqueDirectoryPath(String originalPath) {
+    final dir = Directory(originalPath);
+    if (!dir.existsSync()) {
+      return originalPath;
+    }
+
+    final parentDir = path.dirname(originalPath);
+    final dirName = path.basename(originalPath);
+
+    int counter = 1;
+    String uniquePath;
+    
+    do {
+      final newDirName = '$dirName ($counter)';
+      uniquePath = path.join(parentDir, newDirName);
+      counter++;
+    } while (Directory(uniquePath).existsSync());
+
+    return uniquePath;
+  }
+
+  /// Get the effective download directory for a session
+  String _getDownloadDirectoryForSession(String sessionId) {
+    final customLocation = _sessionSaveLocations[sessionId];
+    if (customLocation != null) {
+      return customLocation;
+    }
+    
+    return _settings?.downloadDirectory ?? '';
+  }
+
+  Future<File> _createFileForTransfer(String fileName, String sessionId) async {
+    final downloadDirectory = _getDownloadDirectoryForSession(sessionId);
+    if (downloadDirectory.isEmpty) {
       throw Exception('Download directory not set');
     }
     
-    // Transfer: Handle file path like original receiver.cpp
+    _sessionPathMappings[sessionId] ??= <String, String>{};
+    
     final index = fileName.lastIndexOf('/');
     String filePath;
     
     if (index >= 0) {
-      // File has parent directories - like "4kw1/image.jpg"
-      final dirPath = fileName.substring(0, index); // "4kw1"
-      final fileNamePart = fileName.substring(index); // "/image.jpg"
+      final dirPath = fileName.substring(0, index);
+      final fileNamePart = fileName.substring(index + 1);
       
-      // Convert to platform-specific path
       final normalizedDirPath = dirPath.replaceAll('/', Platform.pathSeparator);
-      final fullDirPath = path.join(_settings!.downloadDirectory, normalizedDirPath);
+      final originalFullDirPath = path.join(downloadDirectory, normalizedDirPath);
       
-      // Transfer: Create parent directories first
-      final dir = Directory(fullDirPath);
-            await dir.create(recursive: true);
+      String mappedDirPath;
+      if (_sessionPathMappings[sessionId]!.containsKey(dirPath)) {
+        mappedDirPath = _sessionPathMappings[sessionId]![dirPath]!;
+      } else {
+        mappedDirPath = _getUniqueDirectoryPath(originalFullDirPath);
+        _sessionPathMappings[sessionId]![dirPath] = mappedDirPath;
+        
+        final dir = Directory(mappedDirPath);
+        await dir.create(recursive: true);
+      }
       
-      // Build final file path
-      filePath = fullDirPath + fileNamePart.replaceAll('/', Platform.pathSeparator);
-          } else {
-      // File with no parent directories
-      filePath = path.join(_settings!.downloadDirectory, fileName);
+      filePath = path.join(mappedDirPath, fileNamePart);
+    } else {
+      filePath = path.join(downloadDirectory, fileName);
     }
+
+    filePath = _getUniqueFilePath(filePath);
     
     final file = File(filePath);
     
-    // Create empty file
     await file.create();
     return file;
   }
 
-  Future<void> _createDirectory(String dirName) async {
-    if (_settings?.downloadDirectory == null) {
+  Future<void> _createDirectory(String dirName, String sessionId) async {
+    final downloadDirectory = _getDownloadDirectoryForSession(sessionId);
+    if (downloadDirectory.isEmpty) {
       throw Exception('Download directory not set');
     }
     
-    // Transfer: Convert forward slashes to platform-specific separators  
+    _sessionPathMappings[sessionId] ??= <String, String>{};
+    
     final normalizedDirName = dirName.replaceAll('/', Platform.pathSeparator);
-    final dirPath = path.join(_settings!.downloadDirectory, normalizedDirName);
-    final dir = Directory(dirPath);
+    final originalDirPath = path.join(downloadDirectory, normalizedDirName);
+    
+    String uniqueDirPath;
+    if (_sessionPathMappings[sessionId]!.containsKey(dirName)) {
+      uniqueDirPath = _sessionPathMappings[sessionId]![dirName]!;
+    } else {
+      uniqueDirPath = _getUniqueDirectoryPath(originalDirPath);
+      _sessionPathMappings[sessionId]![dirName] = uniqueDirPath;
+    }
+    
+    final dir = Directory(uniqueDirPath);
     await dir.create(recursive: true);
   }
 
   Peer _identifyPeerFromAddress(String address, int port) {
-    // Try to find peer from discovery
     if (_peerDiscovery != null) {
       final discoveredPeers = _peerDiscovery!.discoveredPeers;
       for (final peer in discoveredPeers) {
@@ -760,7 +1059,6 @@ class FileTransferService extends ChangeNotifier {
       }
     }
     
-    // Return unknown peer if not found
     return Peer(
       id: 'unknown_$address',
       name: 'Unknown',
@@ -773,12 +1071,19 @@ class FileTransferService extends ChangeNotifier {
 
   void _moveToCompleted(TransferSession session) async {
     _activeSessions.remove(session.id);
+    _pendingRequests.remove(session.id);
+    _transferRequestCompleters.remove(session.id);
+    _speedCalculators.remove(session.id);
+    _sessionPathMappings.remove(session.id);
+    _sessionSaveLocations.remove(session.id);
+    
+    _senderAddressToTransferId.removeWhere((address, transferId) => transferId == session.id);
+    
     _completedSessions[session.id] = session;
     await _saveHistory();
     notifyListeners();
   }
 
-  // Transfer: Utility methods
   List<int> _int64ToBytes(int value) {
     final buffer = Uint8List(8);
     final byteData = ByteData.view(buffer.buffer);
@@ -788,7 +1093,6 @@ class FileTransferService extends ChangeNotifier {
 
   int _bytesToInt64(List<int> bytes) {
     if (bytes.length < 8) {
-      // Pad with zeros if needed
       final paddedBytes = List<int>.filled(8, 0);
       for (int i = 0; i < bytes.length; i++) {
         paddedBytes[i] = bytes[i];
@@ -802,7 +1106,6 @@ class FileTransferService extends ChangeNotifier {
   }
 
 
-  // Transfer: Find best local interface to reach peer (like system routing)
   Future<String?> _findBestLocalInterface(String peerAddress) async {
     try {
       final interfaces = await NetworkInterface.list(
@@ -810,26 +1113,22 @@ class FileTransferService extends ChangeNotifier {
         includeLinkLocal: true,
       );
 
-      // Transfer: Find interface on same subnet as peer
       for (final interface in interfaces) {
         for (final addr in interface.addresses) {
           if (addr.type != InternetAddressType.IPv4) continue;
           
-          // Check if peer is on same subnet (simple /24 check)
           if (_isOnSameSubnet(addr.address, peerAddress)) {
             return addr.address;
           }
         }
       }
       
-      // If no specific match, let system handle routing
       return null;
     } catch (e) {
       return null;
     }
   }
 
-  // Transfer: Check if two IPs are on same subnet (like network routing)
   bool _isOnSameSubnet(String localIP, String peerIP) {
     try {
       final localParts = localIP.split('.').map(int.parse).toList();
@@ -837,7 +1136,6 @@ class FileTransferService extends ChangeNotifier {
       
       if (localParts.length != 4 || peerParts.length != 4) return false;
       
-      // Check for same /24 subnet (first 3 octets match)
       return localParts[0] == peerParts[0] && 
              localParts[1] == peerParts[1] && 
              localParts[2] == peerParts[2];
@@ -862,7 +1160,6 @@ class FileTransferService extends ChangeNotifier {
             final session = TransferSession.fromJson(sessionMap);
             _completedSessions[session.id] = session;
           } catch (e) {
-            // Skip invalid sessions
             continue;
           }
         }
@@ -870,7 +1167,6 @@ class FileTransferService extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      // If loading fails, start with empty history
       _completedSessions.clear();
     }
   }
@@ -885,7 +1181,6 @@ class FileTransferService extends ChangeNotifier {
       final historyJson = jsonEncode(historyList);
       await _prefs!.setString(_historyKey, historyJson);
     } catch (e) {
-      // Handle save error silently
     }
   }
 

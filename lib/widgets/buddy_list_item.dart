@@ -144,23 +144,6 @@ class BuddyListItem extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surfaceContainerHighest,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'Port: ${peer.port}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: theme.colorScheme.onSurfaceVariant,
-                              fontFamily: 'LiberationSans',
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
                         if (peer.connectionType != null && peer.connectionType!.isNotEmpty)
                           Container(
                             margin: const EdgeInsets.only(left: 8),

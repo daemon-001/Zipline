@@ -1,5 +1,6 @@
 import 'package:json_annotation/json_annotation.dart';
 import 'package:flutter/material.dart';
+import '../utils/system_info.dart';
 
 // part 'app_settings.g.dart';
 
@@ -14,7 +15,6 @@ class AppSettings {
   final String buddyName;
   final String buddyAvatar;
   final String destPath;
-  final int port;
   final bool showNotifications;
   final bool startMinimized;
   final bool showTermsOnStart;
@@ -26,7 +26,6 @@ class AppSettings {
     required this.buddyName,
     this.buddyAvatar = '',
     required this.destPath,
-    this.port = 6442,
     this.showNotifications = true,
     this.startMinimized = false,
     this.showTermsOnStart = true,
@@ -37,6 +36,9 @@ class AppSettings {
 
   // Getter for compatibility with optimized services
   String get downloadDirectory => destPath;
+
+  // Fixed port value - cannot be changed by user
+  static int get port => 6442;
 
   // Get the actual brightness based on theme setting
   Brightness get brightness {
@@ -58,7 +60,7 @@ class AppSettings {
       buddyName: json['buddyName'] as String,
       buddyAvatar: json['buddyAvatar'] as String? ?? '',
       destPath: json['destPath'] as String,
-      port: json['port'] as int? ?? 6442,
+      // Port is now fixed at 6442, ignore any saved port value
       showNotifications: json['showNotifications'] as bool? ?? true,
       startMinimized: json['startMinimized'] as bool? ?? false,
       showTermsOnStart: json['showTermsOnStart'] as bool? ?? true,
@@ -76,7 +78,6 @@ class AppSettings {
       'buddyName': buddyName,
       'buddyAvatar': buddyAvatar,
       'destPath': destPath,
-      'port': port,
       'showNotifications': showNotifications,
       'startMinimized': startMinimized,
       'showTermsOnStart': showTermsOnStart,
@@ -90,7 +91,7 @@ class AppSettings {
     String? buddyName,
     String? buddyAvatar,
     String? destPath,
-    int? port,
+    String? downloadDirectory, // Alias for destPath
     bool? showNotifications,
     bool? startMinimized,
     bool? showTermsOnStart,
@@ -101,8 +102,7 @@ class AppSettings {
     return AppSettings(
       buddyName: buddyName ?? this.buddyName,
       buddyAvatar: buddyAvatar ?? this.buddyAvatar,
-      destPath: destPath ?? this.destPath,
-      port: port ?? this.port,
+      destPath: destPath ?? downloadDirectory ?? this.destPath,
       showNotifications: showNotifications ?? this.showNotifications,
       startMinimized: startMinimized ?? this.startMinimized,
       showTermsOnStart: showTermsOnStart ?? this.showTermsOnStart,
@@ -120,7 +120,6 @@ class AppSettings {
           buddyName == other.buddyName &&
           buddyAvatar == other.buddyAvatar &&
           destPath == other.destPath &&
-          port == other.port &&
           showNotifications == other.showNotifications &&
           startMinimized == other.startMinimized &&
           showTermsOnStart == other.showTermsOnStart &&
@@ -133,7 +132,6 @@ class AppSettings {
         buddyName,
         buddyAvatar,
         destPath,
-        port,
         showNotifications,
         startMinimized,
         showTermsOnStart,
@@ -143,12 +141,11 @@ class AppSettings {
       );
 
   @override
-  String toString() => 'AppSettings{buddyName: $buddyName, port: $port}';
+  String toString() => 'AppSettings{buddyName: $buddyName}';
 }
 
 // Default settings
 AppSettings get defaultSettings => AppSettings(
-      buddyName: 'User',
+      buddyName: SystemInfo.getSystemHostname(), // Use device name as default
       destPath: '', // Will be set to Downloads/Zipline by the app
-      port: 6442,
     );

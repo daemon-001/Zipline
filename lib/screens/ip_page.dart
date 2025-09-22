@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:io';
 import '../widgets/top_notification.dart';
+import '../services/network_utility.dart';
 
 class IpPage extends StatefulWidget {
   final VoidCallback onBack;
@@ -13,7 +13,7 @@ class IpPage extends StatefulWidget {
 }
 
 class _IpPageState extends State<IpPage> {
-  List<Map<String, String>> _networkInterfaces = [];
+  List<NetworkInterfaceInfo> _networkInterfaces = [];
   bool _isLoading = true;
 
   @override
@@ -28,69 +28,13 @@ class _IpPageState extends State<IpPage> {
     });
 
     try {
-      // Get all network interfaces with better filtering
-      final interfaces = await NetworkInterface.list(
-        includeLinkLocal: true,  // Include link-local for better detection
-        includeLoopback: false,
-      );
-
-      // Helper function to check if interface is virtual
-      bool isVirtualInterface(NetworkInterface interface) {
-        final name = interface.name.toLowerCase();
-        return name.contains('virtualbox') || 
-               name.contains('vmware') || 
-               name.contains('hyper-v') ||
-               name.contains('docker') ||
-               name.contains('vethernet') ||
-               name.contains('tun') ||
-               name.contains('tap');
-      }
-
-      // Helper function to get connection type
-      String getConnectionType(String interfaceName) {
-        final name = interfaceName.toLowerCase();
-        if (name.contains('wifi') || name.contains('wlan') || name.contains('wireless')) {
-          return 'WiFi';
-        } else if (name.contains('ethernet') || name.contains('eth') || name.contains('lan')) {
-          return 'Ethernet';
-        } else if (name.contains('bluetooth')) {
-          return 'Bluetooth';
-        } else if (name.contains('vpn') || name.contains('tun')) {
-          return 'VPN';
-        } else if (name.contains('mobile') || name.contains('cellular')) {
-          return 'Mobile';
-        } else {
-          return 'Other';
-        }
-      }
-
-       // Process interfaces and sort by priority - only WiFi and Ethernet
-       final interfaceData = <Map<String, String>>[];
-       
-       for (final interface in interfaces) {
-         if (isVirtualInterface(interface)) continue; // Skip virtual interfaces
-         
-         for (final addr in interface.addresses) {
-           if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
-             final connectionType = getConnectionType(interface.name);
-             
-             // Only include WiFi and Ethernet interfaces
-             if (connectionType == 'WiFi' || connectionType == 'Ethernet') {
-               interfaceData.add({
-                 'name': interface.name,
-                 'address': addr.address,
-                 'type': connectionType,
-                 'isLinkLocal': addr.address.startsWith('169.254.').toString(),
-               });
-             }
-           }
-         }
-       }
-
+      // Use the new network utility with improved interface detection
+      final interfaces = await NetworkUtility.getNetworkInterfaces();
+      
       // Sort by priority: Ethernet first, then WiFi, then others
-      interfaceData.sort((a, b) {
-        final typeA = a['type']!;
-        final typeB = b['type']!;
+      interfaces.sort((a, b) {
+        final typeA = a.type;
+        final typeB = b.type;
         
         if (typeA == 'Ethernet' && typeB != 'Ethernet') return -1;
         if (typeA != 'Ethernet' && typeB == 'Ethernet') return 1;
@@ -101,14 +45,15 @@ class _IpPageState extends State<IpPage> {
       });
 
       setState(() {
-        _networkInterfaces = interfaceData;
+        _networkInterfaces = interfaces;
         _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _networkInterfaces = [{'error': 'Error loading network interfaces: ${e.toString()}', 'name': '', 'address': '', 'type': '', 'isLinkLocal': 'false'}];
+        _networkInterfaces = [];
         _isLoading = false;
       });
+      // Show error in UI instead of in the list
     }
   }
 
@@ -272,7 +217,7 @@ class _IpPageState extends State<IpPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Discovering WiFi and Ethernet connections...',
+              'Discovering all available network connections...',
               style: TextStyle(
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 fontFamily: 'LiberationSans',
@@ -286,11 +231,6 @@ class _IpPageState extends State<IpPage> {
 
   Widget _buildIpList() {
     final theme = Theme.of(context);
-    
-    // Check for error case
-    if (_networkInterfaces.isNotEmpty && _networkInterfaces.first.containsKey('error')) {
-      return _buildErrorState(theme, _networkInterfaces.first['error']!);
-    }
     
     if (_networkInterfaces.isEmpty) {
       return _buildEmptyState(theme);
@@ -352,7 +292,7 @@ class _IpPageState extends State<IpPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Other Zipline users can connect to you using any of these IP addresses.',
+                      'Other Zipline users can connect to you using any of these IP addresses. This includes all active network interfaces.',
                       style: TextStyle(
                         fontSize: 14,
                         color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
@@ -504,11 +444,11 @@ class _IpPageState extends State<IpPage> {
     );
   }
 
-  Widget _buildNetworkInterfaceCard(Map<String, String> interface, ThemeData theme) {
-    final connectionType = interface['type']!;
-    final ipAddress = interface['address']!;
-    final interfaceName = interface['name']!;
-    final isLinkLocal = interface['isLinkLocal'] == 'true';
+  Widget _buildNetworkInterfaceCard(NetworkInterfaceInfo interface, ThemeData theme) {
+    final connectionType = interface.type;
+    final ipAddress = interface.address;
+    final interfaceName = interface.name;
+    final isLinkLocal = ipAddress.startsWith('169.254.');
     
     return Card(
       elevation: 1,
@@ -653,14 +593,17 @@ class _IpPageState extends State<IpPage> {
       case 'wifi':
       case 'wireless':
         return const Color(0xFF2196F3); // Modern blue
-      case 'vpn':
+      case 'virtual':
         return const Color(0xFFFF9800); // Modern orange
       case 'bluetooth':
         return const Color(0xFF9C27B0); // Modern purple
       case 'mobile':
         return const Color(0xFFE91E63); // Modern pink
+      case 'tunnel':
+        return const Color(0xFF795548); // Modern brown
+      case 'network':
       default:
-        return const Color(0xFF9E9E9E); // Modern grey
+        return const Color(0xFF607D8B); // Modern blue-grey
     }
   }
 
@@ -671,12 +614,15 @@ class _IpPageState extends State<IpPage> {
       case 'wifi':
       case 'wireless':
         return Icons.wifi;
-      case 'vpn':
-        return Icons.vpn_key;
+      case 'virtual':
+        return Icons.dns; // Virtual/proxy icon
       case 'bluetooth':
         return Icons.bluetooth;
       case 'mobile':
         return Icons.phone_android;
+      case 'tunnel':
+        return Icons.vpn_key;
+      case 'network':
       default:
         return Icons.router;
     }
@@ -689,12 +635,15 @@ class _IpPageState extends State<IpPage> {
       case 'wifi':
       case 'wireless':
         return 'WiFi';
-      case 'vpn':
-        return 'VPN';
+      case 'virtual':
+        return 'VIRTUAL';
       case 'bluetooth':
         return 'BLUETOOTH';
       case 'mobile':
         return 'MOBILE';
+      case 'tunnel':
+        return 'TUNNEL';
+      case 'network':
       default:
         return connectionType.toUpperCase();
     }

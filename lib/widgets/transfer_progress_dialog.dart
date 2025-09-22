@@ -102,6 +102,8 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
     switch (widget.session.status) {
       case TransferStatus.pending:
         return theme.colorScheme.tertiary;
+      case TransferStatus.waitingForAcceptance:
+        return theme.colorScheme.secondary;
       case TransferStatus.inProgress:
         return theme.colorScheme.primary;
       case TransferStatus.completed:
@@ -117,6 +119,8 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
     switch (widget.session.status) {
       case TransferStatus.pending:
         return 'Preparing...';
+      case TransferStatus.waitingForAcceptance:
+        return 'Waiting for acceptance...';
       case TransferStatus.inProgress:
         return 'Transferring...';
       case TransferStatus.completed:

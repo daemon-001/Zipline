@@ -28,11 +28,11 @@ class TransferProgressWidget extends StatelessWidget {
     final theme = Theme.of(context);
     
     return Card(
-      margin: const EdgeInsets.all(12),
-      elevation: session.status == TransferStatus.completed ? 2 : 4,
-      color: session.status == TransferStatus.completed 
-          ? theme.colorScheme.surfaceContainerLow 
-          : theme.colorScheme.surface,
+      elevation: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -53,22 +53,40 @@ class TransferProgressWidget extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        session.direction == TransferDirection.sending
-                            ? 'Sending to ${session.peer.name}'
-                            : 'Receiving from ${session.peer.name}',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'Klill',
-                          color: theme.colorScheme.onSurface,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            _getHeaderText(),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'Klill',
+                              color: theme.colorScheme.onSurface,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Center(
+                              child: Icon(
+                                Icons.computer,
+                                size: 14,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       Text(
                         '${session.peer.address}:${session.peer.port}',
                         style: TextStyle(
                           fontSize: 12,
-                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                          color: theme.colorScheme.onSurface.withOpacity(0.6),
                           fontFamily: 'LiberationSans',
                         ),
                       ),
@@ -84,14 +102,14 @@ class TransferProgressWidget extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             
             // Progress bar
             _buildProgressBar(theme),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             
-            // Transfer statistics (only for non-completed transfers)
-            if (session.status != TransferStatus.completed)
+            // Transfer statistics (only for active transfers)
+            if (session.status == TransferStatus.inProgress)
               Row(
                 children: [
                   Expanded(child: _buildTransferStats(theme)),
@@ -99,14 +117,14 @@ class TransferProgressWidget extends StatelessWidget {
                     _buildSpeedInfo(theme),
                 ],
               ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             
             // Current file being transferred (only for multi-file transfers)
             if (session.status == TransferStatus.inProgress && !_isFolderTransfer() && !_isSingleFileTransfer())
               _buildCurrentFileInfo(theme),
             
-            // Files list (collapsed by default, expandable)
-            if (session.items.isNotEmpty)
+            // Files list (collapsed by default, expandable) - Only show for active transfers
+            if (session.items.isNotEmpty && session.status == TransferStatus.inProgress)
               _buildFilesSection(theme),
             
             // Error information
@@ -122,6 +140,54 @@ class TransferProgressWidget extends StatelessWidget {
     // For completed transfers, show a clean summary without progress bar
     if (session.status == TransferStatus.completed) {
       return _buildCompletedSummary(theme);
+    }
+    
+    // For failed transfers, show a failed summary without progress bar
+    if (session.status == TransferStatus.failed) {
+      return _buildFailedSummary(theme);
+    }
+    
+    // For cancelled transfers, show a cancelled summary without progress bar
+    if (session.status == TransferStatus.cancelled) {
+      return _buildCancelledSummary(theme);
+    }
+    
+    // For waiting for acceptance, show a different UI
+    if (session.status == TransferStatus.waitingForAcceptance) {
+      return Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(_getStatusColor(theme)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Waiting for recipient to accept...',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontStyle: FontStyle.italic,
+                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${_formatSize(session.totalSize)} • ${session.totalFiles} ${session.totalFiles == 1 ? 'item' : 'items'}',
+            style: TextStyle(
+              fontSize: 12,
+              color: theme.colorScheme.onSurface.withOpacity(0.6),
+            ),
+          ),
+        ],
+      );
     }
     
     // For active transfers, show progress bar
@@ -172,18 +238,20 @@ class TransferProgressWidget extends StatelessWidget {
     return Row(
       children: [
         Icon(
-          Icons.description_outlined,
+          _isFolderTransfer() ? Icons.folder : Icons.description_outlined,
           size: 16,
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          color: theme.colorScheme.onSurface.withOpacity(0.6),
         ),
         const SizedBox(width: 4),
         Text(
-          session.totalFiles > 0
-              ? '${session.completedFiles}/${session.totalFiles} files'
-              : '${session.items.length} ${session.items.length == 1 ? 'item' : 'items'}',
+          _isFolderTransfer()
+              ? '1/1 folder'
+              : session.totalFiles > 0
+                  ? '${session.completedFiles}/${session.totalFiles} files'
+                  : '${session.items.length} ${session.items.length == 1 ? 'item' : 'items'}',
           style: TextStyle(
             fontSize: 12,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
             fontFamily: 'LiberationSans',
           ),
         ),
@@ -191,14 +259,14 @@ class TransferProgressWidget extends StatelessWidget {
         Icon(
           Icons.access_time,
           size: 16,
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          color: theme.colorScheme.onSurface.withOpacity(0.6),
         ),
         const SizedBox(width: 4),
         Text(
           _getElapsedTime(),
           style: TextStyle(
             fontSize: 12,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            color: theme.colorScheme.onSurface.withOpacity(0.6),
             fontFamily: 'LiberationSans',
           ),
         ),
@@ -208,42 +276,138 @@ class TransferProgressWidget extends StatelessWidget {
 
   Widget _buildCompletedSummary(ThemeData theme) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primaryContainer.withValues(alpha: 0.3),
+        color: Colors.green.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.3)),
+        border: Border.all(color: Colors.green.withOpacity(0.3)),
       ),
       child: Column(
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.check_circle,
-                    size: 16,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Transfer completed successfully',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: theme.colorScheme.primary,
-                      fontFamily: 'LiberationSans',
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      size: 16,
+                      color: Colors.green.shade700,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _getTransferDescription(),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.green.shade700,
+                          fontFamily: 'LiberationSans',
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               Text(
                 _formatSize(session.totalSize),
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: theme.colorScheme.primary,
+                  color: Colors.green.shade700,
+                  fontFamily: 'LiberationSans',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(
+                _isFolderTransfer() ? Icons.folder : Icons.description_outlined,
+                size: 14,
+                color: Colors.green.shade700,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _isFolderTransfer()
+                    ? '1/1 folder'
+                    : session.totalFiles > 0
+                        ? '${session.completedFiles}/${session.totalFiles} files'
+                        : '${session.items.length} ${session.items.length == 1 ? 'item' : 'items'}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.green.shade700,
+                  fontFamily: 'LiberationSans',
+                ),
+              ),
+              const SizedBox(width: 16),
+              Icon(
+                Icons.access_time,
+                size: 14,
+                color: Colors.green.shade700,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _getElapsedTime(),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.green.shade700,
+                  fontFamily: 'LiberationSans',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFailedSummary(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.errorContainer.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.colorScheme.error.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 16,
+                      color: theme.colorScheme.error,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _getTransferDescription(),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: theme.colorScheme.error,
+                          fontFamily: 'LiberationSans',
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                _formatSize(session.totalSize),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.error,
                   fontFamily: 'LiberationSans',
                 ),
               ),
@@ -253,18 +417,20 @@ class TransferProgressWidget extends StatelessWidget {
           Row(
             children: [
               Icon(
-                Icons.description_outlined,
+                _isFolderTransfer() ? Icons.folder : Icons.description_outlined,
                 size: 14,
-                color: theme.colorScheme.primary,
+                color: theme.colorScheme.error,
               ),
               const SizedBox(width: 4),
               Text(
-                session.totalFiles > 0
-                    ? '${session.completedFiles}/${session.totalFiles} files'
-                    : '${session.items.length} ${session.items.length == 1 ? 'item' : 'items'}',
+                _isFolderTransfer()
+                    ? '0/1 folder'
+                    : session.totalFiles > 0
+                        ? '${session.completedFiles}/${session.totalFiles} files'
+                        : '${session.items.length} ${session.items.length == 1 ? 'item' : 'items'}',
                 style: TextStyle(
                   fontSize: 11,
-                  color: theme.colorScheme.primary,
+                  color: theme.colorScheme.error,
                   fontFamily: 'LiberationSans',
                 ),
               ),
@@ -272,14 +438,105 @@ class TransferProgressWidget extends StatelessWidget {
               Icon(
                 Icons.access_time,
                 size: 14,
-                color: theme.colorScheme.primary,
+                color: theme.colorScheme.error,
               ),
               const SizedBox(width: 4),
               Text(
                 _getElapsedTime(),
                 style: TextStyle(
                   fontSize: 11,
-                  color: theme.colorScheme.primary,
+                  color: theme.colorScheme.error,
+                  fontFamily: 'LiberationSans',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCancelledSummary(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.amber.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.amber.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.cancel_outlined,
+                      size: 16,
+                      color: Colors.amber.shade700,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _getTransferDescription(),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.amber.shade700,
+                          fontFamily: 'LiberationSans',
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                _formatSize(session.totalSize),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.amber.shade700,
+                  fontFamily: 'LiberationSans',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Icon(
+                _isFolderTransfer() ? Icons.folder : Icons.description_outlined,
+                size: 14,
+                color: Colors.amber.shade700,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _isFolderTransfer()
+                    ? '0/1 folder'
+                    : session.totalFiles > 0
+                        ? '${session.completedFiles}/${session.totalFiles} files'
+                        : '${session.items.length} ${session.items.length == 1 ? 'item' : 'items'}',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.amber.shade700,
+                  fontFamily: 'LiberationSans',
+                ),
+              ),
+              const SizedBox(width: 16),
+              Icon(
+                Icons.access_time,
+                size: 14,
+                color: Colors.amber.shade700,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _getElapsedTime(),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.amber.shade700,
                   fontFamily: 'LiberationSans',
                 ),
               ),
@@ -741,6 +998,9 @@ class TransferProgressWidget extends StatelessWidget {
     Color color = _getStatusColor(theme);
     
     switch (session.status) {
+      case TransferStatus.waitingForAcceptance:
+        text = 'Waiting for acceptance';
+        break;
       case TransferStatus.inProgress:
         text = 'In Progress';
         break;
@@ -760,14 +1020,10 @@ class TransferProgressWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: session.status == TransferStatus.completed 
-            ? theme.colorScheme.primaryContainer 
-            : color.withOpacity(0.1),
+        color: _getStatusColor(theme).withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: session.status == TransferStatus.completed 
-              ? theme.colorScheme.primary
-              : color.withOpacity(0.3)
+          color: _getStatusColor(theme).withOpacity(0.3)
         ),
       ),
       child: Row(
@@ -777,7 +1033,23 @@ class TransferProgressWidget extends StatelessWidget {
             Icon(
               Icons.check_circle,
               size: 12,
-              color: theme.colorScheme.primary,
+              color: _getStatusColor(theme),
+            ),
+            const SizedBox(width: 4),
+          ],
+          if (session.status == TransferStatus.failed) ...[
+            Icon(
+              Icons.error_outline,
+              size: 12,
+              color: _getStatusColor(theme),
+            ),
+            const SizedBox(width: 4),
+          ],
+          if (session.status == TransferStatus.cancelled) ...[
+            Icon(
+              Icons.cancel_outlined,
+              size: 12,
+              color: _getStatusColor(theme),
             ),
             const SizedBox(width: 4),
           ],
@@ -786,9 +1058,7 @@ class TransferProgressWidget extends StatelessWidget {
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.bold,
-              color: session.status == TransferStatus.completed 
-                  ? theme.colorScheme.onPrimaryContainer
-                  : color,
+              color: _getStatusColor(theme),
               fontFamily: 'LiberationSans',
             ),
           ),
@@ -799,14 +1069,16 @@ class TransferProgressWidget extends StatelessWidget {
 
   Color _getStatusColor(ThemeData theme) {
     switch (session.status) {
+      case TransferStatus.waitingForAcceptance:
+        return theme.colorScheme.secondary;
       case TransferStatus.inProgress:
         return theme.colorScheme.primary;
       case TransferStatus.completed:
-        return theme.colorScheme.primary;
+        return Colors.green.shade700;
       case TransferStatus.failed:
         return theme.colorScheme.error;
       case TransferStatus.cancelled:
-        return theme.colorScheme.tertiary;
+        return Colors.amber.shade700;
       default:
         return theme.colorScheme.onSurfaceVariant;
     }
@@ -852,14 +1124,8 @@ class TransferProgressWidget extends StatelessWidget {
   }
 
   double _calculateTransferSpeed() {
-    final elapsed = DateTime.now().difference(session.startedAt);
-    if (elapsed.inSeconds == 0) return 0.0;
-    
-    // Calculate speed in bytes per second
-    final speed = session.transferredSize / elapsed.inSeconds;
-    
-    // Return 0 if speed is too low to be meaningful
-    return speed < 1.0 ? 0.0 : speed;
+    // Use the speed from the SpeedCalculator system instead of basic calculation
+    return session.currentSpeed;
   }
 
   double _calculateETA() {
@@ -876,4 +1142,117 @@ class TransferProgressWidget extends StatelessWidget {
     final regex = RegExp(r' \(\d+\)$');
     return folderName.replaceAll(regex, '');
   }
+
+  /// Generate a meaningful description of the transferred files/folders
+  String _getTransferDescription() {
+    if (session.items.isEmpty) {
+      if (session.totalFiles > 0) {
+        return session.totalFiles == 1 ? '1 file' : '${session.totalFiles} files';
+      }
+      return 'Transfer completed';
+    }
+
+    final files = session.items.where((item) => item.type == TransferType.file).toList();
+    final folders = session.items.where((item) => item.type == TransferType.folder).toList();
+    final texts = session.items.where((item) => item.type == TransferType.text).toList();
+
+    // For folder transfers, just show the folder name
+    if (_isFolderTransfer()) {
+      if (folders.isNotEmpty) {
+        return _getDisplayFolderName(folders.first.name);
+      }
+    }
+
+    List<String> parts = [];
+
+    // Handle single items first for better display
+    if (session.items.length == 1) {
+      final item = session.items.first;
+      switch (item.type) {
+        case TransferType.file:
+          return item.name;
+        case TransferType.folder:
+          return _getDisplayFolderName(item.name);
+        case TransferType.text:
+          return 'Text message';
+      }
+    }
+
+    // Handle multiple items - show actual file names instead of counts
+    if (files.length == 1) {
+      parts.add(files.first.name);
+    } else if (files.length > 1) {
+      // Show first file name + additional count: "filename.txt +5 files"
+      final firstName = files.first.name;
+      final additionalCount = files.length - 1;
+      parts.add('$firstName +$additionalCount files');
+    }
+
+    if (folders.length == 1) {
+      parts.add(_getDisplayFolderName(folders.first.name));
+    } else if (folders.length > 1) {
+      // Show first folder name + additional count: "foldername +2 folders"
+      final firstName = _getDisplayFolderName(folders.first.name);
+      final additionalCount = folders.length - 1;
+      parts.add('$firstName +$additionalCount folders');
+    }
+
+    if (texts.isNotEmpty) {
+      parts.add('text');
+    }
+
+    if (parts.isEmpty) {
+      return 'Transfer completed';
+    } else if (parts.length == 1) {
+      return parts.first;
+    } else if (parts.length == 2) {
+      return '${parts[0]} and ${parts[1]}';
+    } else {
+      return '${parts.take(parts.length - 1).join(', ')} and ${parts.last}';
+    }
+  }
+
+  /// Get the header text based on transfer status and direction
+  String _getHeaderText() {
+    final isCompleted = session.status == TransferStatus.completed || 
+                       session.status == TransferStatus.failed ||
+                       session.status == TransferStatus.cancelled;
+    
+    final hostName = _extractHostname(session.peer.name);
+    
+    if (session.direction == TransferDirection.sending) {
+      if (isCompleted) {
+        return 'Sent to $hostName';
+      } else {
+        return 'Sending to $hostName';
+      }
+    } else {
+      if (isCompleted) {
+        return 'Received from $hostName';
+      } else {
+        return 'Receiving from $hostName';
+      }
+    }
+  }
+
+  String _extractHostname(String displayName) {
+    // Extract hostname from formats like "Username at Hostname (Platform)" or "Hostname (Platform)"
+    if (displayName.contains(' at ')) {
+      // Format: "Username at Hostname (Platform)"
+      final parts = displayName.split(' at ');
+      if (parts.length > 1) {
+        final hostnamePart = parts[1];
+        // Remove platform info if present: "Hostname (Platform)" -> "Hostname"
+        if (hostnamePart.contains(' (')) {
+          return hostnamePart.split(' (')[0];
+        }
+        return hostnamePart;
+      }
+    } else if (displayName.contains(' (')) {
+      // Format: "Hostname (Platform)"
+      return displayName.split(' (')[0];
+    }
+    return displayName;
+  }
+
 }

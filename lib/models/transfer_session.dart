@@ -5,7 +5,14 @@ import 'transfer_item.dart';
 // part 'transfer_session.g.dart';
 
 enum TransferDirection { sending, receiving, outgoing, incoming }
-enum TransferStatus { pending, inProgress, completed, failed, cancelled }
+enum TransferStatus { 
+  pending, 
+  waitingForAcceptance, 
+  inProgress, 
+  completed, 
+  failed, 
+  cancelled 
+}
 
 @JsonSerializable()
 class TransferSession {
@@ -16,8 +23,10 @@ class TransferSession {
   final TransferStatus status;
   final DateTime startedAt;
   final DateTime? completedAt;
+  final DateTime? actualDataTransferStartedAt; // When actual data transfer began
   final int totalSize;
   final int transferredSize;
+  final double currentSpeed; // Speed in bytes per second from SpeedCalculator
   final String? error;
   final String? currentFileName;
   final int totalFiles;
@@ -31,8 +40,10 @@ class TransferSession {
     required this.status,
     required this.startedAt,
     this.completedAt,
+    this.actualDataTransferStartedAt,
     required this.totalSize,
     this.transferredSize = 0,
+    this.currentSpeed = 0.0,
     this.error,
     this.currentFileName,
     this.totalFiles = 0,
@@ -55,8 +66,12 @@ class TransferSession {
       completedAt: json['completedAt'] != null 
           ? DateTime.parse(json['completedAt'] as String) 
           : null,
+      actualDataTransferStartedAt: json['actualDataTransferStartedAt'] != null 
+          ? DateTime.parse(json['actualDataTransferStartedAt'] as String) 
+          : null,
       totalSize: json['totalSize'] as int,
       transferredSize: json['transferredSize'] as int? ?? 0,
+      currentSpeed: (json['currentSpeed'] as num?)?.toDouble() ?? 0.0,
       error: json['error'] as String?,
       currentFileName: json['currentFileName'] as String?,
       totalFiles: json['totalFiles'] as int? ?? 0,
@@ -73,8 +88,10 @@ class TransferSession {
       'status': status.name,
       'startedAt': startedAt.toIso8601String(),
       'completedAt': completedAt?.toIso8601String(),
+      'actualDataTransferStartedAt': actualDataTransferStartedAt?.toIso8601String(),
       'totalSize': totalSize,
       'transferredSize': transferredSize,
+      'currentSpeed': currentSpeed,
       'error': error,
       'currentFileName': currentFileName,
       'totalFiles': totalFiles,
@@ -90,8 +107,10 @@ class TransferSession {
     TransferStatus? status,
     DateTime? startedAt,
     DateTime? completedAt,
+    DateTime? actualDataTransferStartedAt,
     int? totalSize,
     int? transferredSize,
+    double? currentSpeed,
     String? error,
     String? currentFileName,
     int? totalFiles,
@@ -105,8 +124,10 @@ class TransferSession {
       status: status ?? this.status,
       startedAt: startedAt ?? this.startedAt,
       completedAt: completedAt ?? this.completedAt,
+      actualDataTransferStartedAt: actualDataTransferStartedAt ?? this.actualDataTransferStartedAt,
       totalSize: totalSize ?? this.totalSize,
       transferredSize: transferredSize ?? this.transferredSize,
+      currentSpeed: currentSpeed ?? this.currentSpeed,
       error: error ?? this.error,
       currentFileName: currentFileName ?? this.currentFileName,
       totalFiles: totalFiles ?? this.totalFiles,
@@ -154,6 +175,8 @@ class TransferSession {
     switch (status) {
       case TransferStatus.pending:
         return 'Pending';
+      case TransferStatus.waitingForAcceptance:
+        return 'Waiting for Acceptance';
       case TransferStatus.inProgress:
         return 'In Progress';
       case TransferStatus.completed:

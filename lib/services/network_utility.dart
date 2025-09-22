@@ -84,6 +84,7 @@ class NetworkUtility {
   }
 
   /// Get all active network interfaces
+  /// Include ALL active interfaces (no restrictive filtering)
   static Future<List<NetworkInterfaceInfo>> getNetworkInterfaces() async {
     final interfaces = <NetworkInterfaceInfo>[];
     
@@ -94,6 +95,15 @@ class NetworkUtility {
       );
 
       for (final interface in networkInterfaces) {
+        // Skip only clearly problematic interfaces
+        final name = interface.name.toLowerCase();
+        if (name.contains('loopback') ||
+            name.contains('teredo') ||
+            name.contains('isatap') ||
+            name.contains('6to4')) {
+          continue;
+        }
+        
         for (final address in interface.addresses) {
           if (address.type == InternetAddressType.IPv4) {
             final interfaceType = _getInterfaceType(interface.name);
@@ -133,7 +143,7 @@ class NetworkUtility {
     return interfaces.isNotEmpty ? interfaces.first : null;
   }
 
-  /// Determine interface type from name
+  /// Determine interface type from name (improved detection)
   static String _getInterfaceType(String name) {
     final lowerName = name.toLowerCase();
     
@@ -144,7 +154,8 @@ class NetworkUtility {
         lowerName.contains('wlan') ||
         lowerName.contains('802.11') ||
         lowerName.contains('airport') ||
-        lowerName.contains('wifi adapter')) {
+        lowerName.contains('wifi adapter') ||
+        lowerName.contains('wireless network adapter')) {
       return 'WiFi';
     } 
     // Ethernet patterns
@@ -155,26 +166,42 @@ class NetworkUtility {
              lowerName.contains('gigabit') ||
              lowerName.contains('fast ethernet') ||
              lowerName.contains('realtek') ||
-             lowerName.contains('intel ethernet')) {
+             lowerName.contains('intel ethernet') ||
+             lowerName.contains('broadcom') ||
+             lowerName.contains('marvell') ||
+             lowerName.contains('killer ethernet')) {
       return 'Ethernet';
     } 
-    // Other connection types
+    // Virtual interfaces (still identify them even though we use them)
+    else if (lowerName.contains('vmware') || 
+             lowerName.contains('virtualbox') ||
+             lowerName.contains('hyper-v') ||
+             lowerName.contains('vbox') ||
+             lowerName.contains('virtual')) {
+      return 'Virtual';
+    }
+    // Bluetooth
     else if (lowerName.contains('bluetooth') || 
              lowerName.contains('bt')) {
       return 'Bluetooth';
-    } else if (lowerName.contains('vmware') || 
-               lowerName.contains('virtualbox') ||
-               lowerName.contains('hyper-v') ||
-               lowerName.contains('vbox') ||
-               lowerName.contains('virtual')) {
-      return 'Virtual';
-    } else if (lowerName.contains('mobile') || 
-               lowerName.contains('cellular') ||
-               lowerName.contains('usb') ||
-               lowerName.contains('modem')) {
+    } 
+    // Mobile/USB connections
+    else if (lowerName.contains('mobile') || 
+             lowerName.contains('cellular') ||
+             lowerName.contains('usb') ||
+             lowerName.contains('modem') ||
+             lowerName.contains('ppp') ||
+             lowerName.contains('dial')) {
       return 'Mobile';
-    } else {
-      // If we can't determine, be conservative and return Network
+    } 
+    // Tunneling interfaces
+    else if (lowerName.contains('tunnel') ||
+             lowerName.contains('tap') ||
+             lowerName.contains('tun')) {
+      return 'Tunnel';
+    }
+    else {
+      // For unknown interfaces, return 'Network' (neutral)
       return 'Network';
     }
   }
