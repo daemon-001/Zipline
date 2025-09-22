@@ -75,12 +75,8 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
 
   String _getTransferSpeedText() {
     if (widget.session.status == TransferStatus.inProgress && 
-        widget.session.startedAt != null) {
-      final elapsed = DateTime.now().difference(widget.session.startedAt!);
-      if (elapsed.inSeconds > 0) {
-        final bytesPerSecond = widget.session.transferredSize / elapsed.inSeconds;
-        return _formatBytes(bytesPerSecond.round()) + '/s';
-      }
+        widget.session.currentSpeed > 0) {
+      return _formatBytes(widget.session.currentSpeed.round()) + '/s';
     }
     return '';
   }
