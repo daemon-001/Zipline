@@ -2,7 +2,19 @@
 
 **Fast and easy file transfer tool for LAN users**
 
-Zipline is a modern, cross-platform file transfer application built with Flutter. It enables fast and secure file sharing between devices on the same local network without requiring internet connectivity.
+Zipline is a modern, cross-platform file transfer application built with Flutter. It enables fast file sharing between devices on the same local network without requiring internet connectivity.
+
+## Visuals
+### Home page
+<img width="982" height="703" alt="zipline 21-09-2025 09_10_15 PM" src="https://github.com/user-attachments/assets/b4c1b3ac-9023-41c8-aa4c-ccfc89f40af5" />
+
+### Transfer page
+<img width="982" height="703" alt="zipline 21-09-2025 09_10_23 PM" src="https://github.com/user-attachments/assets/70059fca-9c25-4a21-a7ef-646ca92277ae" />
+
+### Progress bar
+<img width="982" height="703" alt="zipline 21-09-2025 09_10_42 PM" src="https://github.com/user-attachments/assets/1f92f6cf-2d07-47a5-86b1-4e5f26e9efe4" />
+
+
 
 ## Features
 
@@ -21,7 +33,7 @@ Zipline is a modern, cross-platform file transfer application built with Flutter
 ## Requirements
 
 ### System Requirements
-- **Operating System**: Windows 10/11, macOS 10.14+, or Linux (Ubuntu 18.04+)
+- **Operating System**: Windows 10/11, Android, macOS 10.14+, or Linux (Ubuntu 18.04+)
 - **RAM**: 256 MB minimum, 1 GB recommended
 - **Storage**: 50 MB free space (lightweight, no external assets)
 - **Network**: Local area network (LAN) connection - WiFi or Ethernet
