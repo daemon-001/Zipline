@@ -15,9 +15,28 @@ import 'network_utility.dart';
 
 /// File transfer service implementation
 class FileTransferService extends ChangeNotifier {
-  static const int bufferSize = 1024 * 1024;
-  static const int maxSocketBufferSize = 1024 * 1024;
-  static const int progressUpdateInterval = 256 * 1024; 
+  static const int bufferSize = 4 * 1024 * 1024; // Increased to 4MB for better throughput
+  static const int maxSocketBufferSize = 8 * 1024 * 1024; // Increased to 8MB
+  static const int progressUpdateInterval = 1024 * 1024; // Increased to 1MB to reduce overhead 
+  
+  // Adaptive buffer sizing based on file size
+  int _getOptimalBufferSize(int fileSize) {
+    if (fileSize < 10 * 1024 * 1024) { // < 10MB
+      return 1024 * 1024; // 1MB buffer
+    } else if (fileSize < 100 * 1024 * 1024) { // < 100MB
+      return 2 * 1024 * 1024; // 2MB buffer
+    } else if (fileSize < 1024 * 1024 * 1024) { // < 1GB
+      return 4 * 1024 * 1024; // 4MB buffer
+    } else {
+      return 8 * 1024 * 1024; // 8MB buffer for large files
+    }
+  }
+  
+  // Check if transfer should use high-performance mode
+  bool _shouldUseHighPerformanceMode(int fileSize, int totalSize) {
+    return fileSize > 50 * 1024 * 1024 || totalSize > 100 * 1024 * 1024; // 50MB+ files or 100MB+ total
+  }
+  
   static const String textElementName = '___ZIPLINE___TEXT___';
   static const String _historyKey = 'zipline_transfer_history';
 
@@ -380,8 +399,8 @@ class FileTransferService extends ChangeNotifier {
         
         socket.setOption(SocketOption.tcpNoDelay, true);
         try {
-          socket.setRawOption(RawSocketOption.fromInt(6, 7, 2 * 1024 * 1024)); // TCP_SNDBUF - 2MB
-          socket.setRawOption(RawSocketOption.fromInt(6, 8, 2 * 1024 * 1024)); // TCP_RCVBUF - 2MB
+          socket.setRawOption(RawSocketOption.fromInt(6, 7, 8 * 1024 * 1024)); // TCP_SNDBUF - 8MB
+          socket.setRawOption(RawSocketOption.fromInt(6, 8, 8 * 1024 * 1024)); // TCP_RCVBUF - 8MB
         } catch (e) {
         }
         } catch (e) {
@@ -475,20 +494,28 @@ class FileTransferService extends ChangeNotifier {
     final fileHandle = await file.open();
     
     try {
+      final highPerformanceMode = _shouldUseHighPerformanceMode(fileSize, session.totalSize);
+      
       while (fileBytesRead < fileSize) {
-        await _implementFlowControl(socket, totalBytesSent);
+        await _implementFlowControl(socket, totalBytesSent, highPerformanceMode: highPerformanceMode);
         
-        final chunkSize = (fileSize - fileBytesRead).clamp(0, bufferSize);
+        // Use adaptive buffer size based on file size for optimal performance
+        final optimalBufferSize = _getOptimalBufferSize(fileSize);
+        final remainingBytes = fileSize - fileBytesRead;
+        final chunkSize = remainingBytes > optimalBufferSize ? optimalBufferSize : remainingBytes;
         final chunk = await fileHandle.read(chunkSize);
         
         if (chunk.isEmpty) break;
         
         socket.add(chunk);
         fileBytesRead += chunk.length;
-        
-        await socket.flush();
         fileBytesActuallySent = fileBytesRead;
         totalBytesSent += chunk.length;
+        
+        // Only flush every few chunks to reduce overhead - adaptive based on buffer size
+        if (fileBytesRead % (optimalBufferSize ~/ 4) == 0 || fileBytesRead >= fileSize) {
+          await socket.flush();
+        }
         
         if (fileBytesActuallySent - lastProgressUpdate >= progressUpdateInterval || 
             fileBytesRead >= fileSize) {
@@ -538,15 +565,18 @@ class FileTransferService extends ChangeNotifier {
     return fileBytesRead;
   }
   
-  Future<void> _implementFlowControl(Socket socket, int totalBytesSent) async {
-    
-    if (totalBytesSent > 50 * 1024 * 1024) {
+  Future<void> _implementFlowControl(Socket socket, int totalBytesSent, {bool highPerformanceMode = false}) async {
+    if (highPerformanceMode) {
+      // No artificial delays in high-performance mode - let TCP handle flow control
       return;
-    } else if (totalBytesSent > 10 * 1024 * 1024) {
-      await Future.delayed(Duration(microseconds: 100));
-    } else {
-      await Future.delayed(Duration(microseconds: 500));
     }
+    
+    // Reduced flow control delays for better performance
+    // Only apply minimal delay for very small transfers to prevent overwhelming the receiver
+    if (totalBytesSent < 1024 * 1024) { // Only for first 1MB
+      await Future.delayed(Duration(microseconds: 50)); // Reduced from 500μs
+    }
+    // No delays for larger transfers - let TCP handle flow control
   }
 
   Future<int> _sendTextElement(Socket socket, String text, TransferSession session, int totalBytesSent) async {
@@ -618,8 +648,8 @@ class FileTransferService extends ChangeNotifier {
     socket.setOption(SocketOption.tcpNoDelay, true);
     // Set larger buffer sizes for high-speed transfers
     try {
-      socket.setRawOption(RawSocketOption.fromInt(6, 7, 2 * 1024 * 1024)); // TCP_SNDBUF - 2MB
-      socket.setRawOption(RawSocketOption.fromInt(6, 8, 2 * 1024 * 1024)); // TCP_RCVBUF - 2MB  
+      socket.setRawOption(RawSocketOption.fromInt(6, 7, 8 * 1024 * 1024)); // TCP_SNDBUF - 8MB
+      socket.setRawOption(RawSocketOption.fromInt(6, 8, 8 * 1024 * 1024)); // TCP_RCVBUF - 8MB  
     } catch (e) {
       // Platform doesn't support buffer size configuration
     }
@@ -696,7 +726,7 @@ class FileTransferService extends ChangeNotifier {
                 direction: TransferDirection.receiving,
                 status: TransferStatus.inProgress,
                 startedAt: DateTime.now(),
-                actualDataTransferStartedAt: DateTime.now(), // Data transfer starts immediately for receiver
+                actualDataTransferStartedAt: null, // Will be set when first data is received
                 transferredSize: 0,
               );
               
@@ -818,6 +848,12 @@ class FileTransferService extends ChangeNotifier {
                     currentFileBytesReceived >= currentFileSize)) {
                   final safeTransferredSize = totalReceivedData.clamp(0, session.totalSize);
                   final now = DateTime.now();
+                  
+                  // Set actualDataTransferStartedAt when first data is received
+                  if (session.actualDataTransferStartedAt == null && totalReceivedData > 0) {
+                    session = session.copyWith(actualDataTransferStartedAt: now);
+                    _activeSessions[sessionId] = session;
+                  }
                   
                   // Update speed calculator with proper initialization
                   final speedCalculator = _speedCalculators[sessionId];

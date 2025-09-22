@@ -3,12 +3,12 @@ import 'dart:math';
 
 /// A utility class for calculating accurate transfer speeds with optimized performance
 class SpeedCalculator {
-  // Optimized speed calculation constants
-  static const int _maxSpeedSamples = 8; // Fewer samples for faster response
-  static const int _minTimeForSpeedMs = 500; // Shorter minimum time
-  static const int _speedUpdateIntervalMs = 250; // More frequent updates
-  static const int _outlierThresholdPercent = 300; // Remove samples > 3x average
-  static const double _smoothingFactor = 0.7; // Exponential smoothing
+  // Optimized speed calculation constants for high performance
+  static const int _maxSpeedSamples = 12; // More samples for better accuracy
+  static const int _minTimeForSpeedMs = 200; // Faster initial response
+  static const int _speedUpdateIntervalMs = 100; // More frequent updates for high-speed transfers
+  static const int _outlierThresholdPercent = 200; // Stricter outlier removal
+  static const double _smoothingFactor = 0.8; // Better smoothing for high-speed transfers
   
   final Queue<SpeedSample> _speedSamples = Queue<SpeedSample>();
   DateTime? _lastSpeedUpdate;
