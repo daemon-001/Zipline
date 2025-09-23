@@ -79,26 +79,23 @@ class _TransferPageState extends State<TransferPage>
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: ScaleTransition(
-          scale: _scaleAnimation,
-          child: Column(
-            children: [
-              // Header with back button and title
-              _buildHeader(context, theme),
-              
-              // Buddy details section
-              _buildBuddyDetails(context, theme),
-              
-              // Main transfer content
-              Expanded(
-                child: _buildTransferContent(context, theme, isDark),
-              ),
-            ],
-          ),
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: ScaleTransition(
+        scale: _scaleAnimation,
+        child: Column(
+          children: [
+            // Header with back button and title
+            _buildHeader(context, theme),
+            
+            // Buddy details section
+            _buildBuddyDetails(context, theme),
+            
+            // Main transfer content
+            Expanded(
+              child: _buildTransferContent(context, theme, isDark),
+            ),
+          ],
         ),
       ),
     );

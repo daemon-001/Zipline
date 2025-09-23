@@ -29,11 +29,11 @@ class UserProfileBar extends StatelessWidget {
               width: 56,
               height: 56,
               decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
+                color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.3),
+                    color: theme.colorScheme.shadow.withValues(alpha: 0.1),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -57,7 +57,7 @@ class UserProfileBar extends StatelessWidget {
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
                           fontFamily: 'Klill',
-                          color: theme.colorScheme.primary,
+                          color: theme.colorScheme.onSurface,
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -65,14 +65,18 @@ class UserProfileBar extends StatelessWidget {
                                 width: 32,
                                 height: 32,
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.surfaceContainerHighest,
+                                  color: theme.colorScheme.surfaceContainer,
                                   borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                                    width: 1,
+                                  ),
                                 ),
                                 child: Center(
                                   child: Icon(
                                     Icons.computer,
                                     size: 20,
-                                    color: theme.colorScheme.primary,
+                                    color: theme.colorScheme.onSurface,
                                   ),
                                 ),
                               ),
@@ -88,8 +92,12 @@ class UserProfileBar extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
+                color: theme.colorScheme.surfaceContainer,
                 borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                  width: 1,
+                ),
               ),
               child: InkWell(
                 onTap: onIpAddressesPressed,
@@ -97,7 +105,7 @@ class UserProfileBar extends StatelessWidget {
                 child: Icon(
                   Icons.router_outlined,
                   size: 20,
-                  color: theme.colorScheme.onSurfaceVariant,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
             ),
@@ -108,8 +116,12 @@ class UserProfileBar extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
+                color: theme.colorScheme.surfaceContainer,
                 borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                  width: 1,
+                ),
               ),
               child: InkWell(
                 onTap: onSettingsPressed,
@@ -117,7 +129,7 @@ class UserProfileBar extends StatelessWidget {
                 child: Icon(
                   Icons.settings_outlined,
                   size: 20,
-                  color: theme.colorScheme.onSurfaceVariant,
+                  color: theme.colorScheme.onSurface,
                 ),
               ),
             ),
@@ -141,33 +153,14 @@ class UserProfileBar extends StatelessWidget {
             ),
           );
         } else {
-          // Fallback to gradient with initial while loading
-          return Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  theme.colorScheme.primary,
-                  theme.colorScheme.primary.withValues(alpha: 0.8),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Center(
-              child: Text(
-                (localPeer?.name.isNotEmpty == true 
-                    ? localPeer!.name.substring(0, 1).toUpperCase()
-                    : 'U'),
-                style: TextStyle(
-                  color: theme.colorScheme.onPrimary,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'Klill',
-                ),
-              ),
+          // Fallback to Zipline logo while loading
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Image.asset(
+              'assets/icon.png',
+              width: 56,
+              height: 56,
+              fit: BoxFit.cover,
             ),
           );
         }

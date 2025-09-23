@@ -20,7 +20,8 @@ void main() async {
     center: true,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
-    titleBarStyle: TitleBarStyle.normal,
+    titleBarStyle: TitleBarStyle.hidden,
+    title: 'Zipline',
   );
 
   windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -54,6 +55,15 @@ class ZiplineApp extends StatelessWidget {
               colorScheme: ColorScheme.fromSeed(
                 seedColor: const Color(0xFF2196F3), // Modern blue
                 brightness: brightness,
+              ),
+              appBarTheme: AppBarTheme(
+                backgroundColor: brightness == Brightness.light 
+                    ? Colors.white 
+                    : null,
+                foregroundColor: brightness == Brightness.light 
+                    ? Colors.black87 
+                    : null,
+                elevation: 0,
               ),
               textTheme: const TextTheme(
                 headlineLarge: TextStyle(

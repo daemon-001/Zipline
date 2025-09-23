@@ -15,11 +15,13 @@ import '../widgets/top_notification.dart';
 import '../widgets/tab_bar_widget.dart';
 import '../widgets/user_profile_bar.dart';
 import '../widgets/transfer_request_dialog.dart';
+import '../widgets/windows_action_bar.dart';
 import 'buddies_page.dart';
 import 'recent_page.dart';
 import 'about_page.dart';
 import 'settings_page.dart';
 import 'ip_page.dart';
+import 'transfer_page.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -32,6 +34,8 @@ class _MainScreenState extends State<MainScreen> {
   int _currentPageIndex = 0;
   bool _showSettings = false;
   bool _showIpPage = false;
+  bool _showTransferPage = false;
+  Peer? _selectedPeer;
   Peer? _localPeer;
   final SaveLocationService _saveLocationService = SaveLocationService();
 
@@ -297,6 +301,15 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       _showSettings = false;
       _showIpPage = false;
+      _showTransferPage = false;
+      _selectedPeer = null;
+    });
+  }
+
+  void showTransferPage(Peer peer) {
+    setState(() {
+      _showTransferPage = true;
+      _selectedPeer = peer;
     });
   }
 
@@ -309,15 +322,22 @@ class _MainScreenState extends State<MainScreen> {
       return IpPage(onBack: _onBackPressed);
     }
 
+    if (_showTransferPage && _selectedPeer != null) {
+      return TransferPage(
+        peer: _selectedPeer!,
+        onBack: _onBackPressed,
+      );
+    }
+
     switch (_currentPageIndex) {
       case 0:
-        return const BuddiesPage();
+        return BuddiesPage(onPeerSelected: showTransferPage);
       case 1:
         return const RecentPage();
       case 2:
         return const AboutPage();
       default:
-        return const BuddiesPage();
+        return BuddiesPage(onPeerSelected: showTransferPage);
     }
   }
 
@@ -406,14 +426,18 @@ class _MainScreenState extends State<MainScreen> {
 
           return Column(
             children: [
+              // Custom Windows action bar
+              WindowsActionBar(
+                title: 'Zipline',
+              ),
               // User profile bar
-              if (!_showSettings && !_showIpPage)
+              if (!_showSettings && !_showIpPage && !_showTransferPage)
                 UserProfileBar(
                   localPeer: _localPeer,
                   onSettingsPressed: _showSettingsPage,
                   onIpAddressesPressed: _showIpList,
                 ),
-              if (!_showSettings && !_showIpPage)
+              if (!_showSettings && !_showIpPage && !_showTransferPage)
                 ZiplineTabBar(
                   currentIndex: _currentPageIndex,
                   onTabChanged: _onTabChanged,

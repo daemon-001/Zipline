@@ -137,7 +137,7 @@ class NetworkWarningDialog extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onContinue,
                 icon: const Icon(Icons.arrow_forward, size: 16),
-                label: const Text('Continue Anyway'),
+                label: const Text('Continue'),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   shape: RoundedRectangleBorder(
