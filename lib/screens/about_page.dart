@@ -68,14 +68,6 @@ class AboutPage extends StatelessWidget {
             width: 120,
             height: 120,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  theme.colorScheme.primary,
-                  theme.colorScheme.primary.withValues(alpha: 0.8),
-                ],
-              ),
               borderRadius: BorderRadius.circular(28),
               boxShadow: [
                 BoxShadow(
@@ -85,15 +77,13 @@ class AboutPage extends StatelessWidget {
                 ),
               ],
             ),
-            child: Center(
-              child: Text(
-                'Z',
-                style: TextStyle(
-                  fontSize: 56,
-                  fontWeight: FontWeight.bold,
-                  color: theme.colorScheme.onPrimary,
-                  fontFamily: 'Klill',
-                ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: Image.asset(
+                'assets/icon.png',
+                width: 120,
+                height: 120,
+                fit: BoxFit.cover,
               ),
             ),
           ),
@@ -153,8 +143,8 @@ class AboutPage extends StatelessWidget {
 
   Widget _buildFeaturesSection(ThemeData theme) {
     final features = [
-      {'icon': Icons.speed, 'title': 'Lightning Fast', 'desc': 'Transfer files at network speed'},
-      {'icon': Icons.security, 'title': 'Secure', 'desc': 'Local network only, no cloud'},
+      {'icon': Icons.speed, 'title': 'Lightning Fast', 'desc': 'Transfer files at network link speed'},
+      {'icon': Icons.security, 'title': 'Secure', 'desc': 'Local network only, no cloud, no internet'},
       {'icon': Icons.touch_app, 'title': 'Easy to Use', 'desc': 'Drag, drop, and send instantly'},
     ];
 
@@ -278,6 +268,7 @@ class AboutPage extends StatelessWidget {
               const SizedBox(height: 20),
               _buildInfoRow('Device Name', appState.settings?.buddyName ?? 'Unknown', theme),
               _buildInfoRow('Platform', 'Windows', theme),
+              _buildInfoRow('Port', '6442', theme),
               _buildInfoRow('Destination', 
                   (appState.settings?.destPath ?? '').isEmpty
                       ? 'Downloads'

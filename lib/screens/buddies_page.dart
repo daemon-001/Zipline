@@ -6,7 +6,9 @@ import '../widgets/buddy_list_item.dart';
 import 'transfer_page.dart';
 
 class BuddiesPage extends StatefulWidget {
-  const BuddiesPage({super.key});
+  final Function(Peer)? onPeerSelected;
+  
+  const BuddiesPage({super.key, this.onPeerSelected});
 
   @override
   State<BuddiesPage> createState() => _BuddiesPageState();
@@ -34,14 +36,18 @@ class _BuddiesPageState extends State<BuddiesPage> {
   }
 
   void _onPeerSelected(Peer peer) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => TransferPage(
-          peer: peer,
-          // Remove redundant onBack callback since TransferPage handles navigation itself
+    if (widget.onPeerSelected != null) {
+      widget.onPeerSelected!(peer);
+    } else {
+      // Fallback to navigation if no callback provided
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => TransferPage(
+            peer: peer,
+          ),
         ),
-      ),
-    );
+      );
+    }
   }
 
   @override
@@ -159,22 +165,6 @@ class _BuddiesPageState extends State<BuddiesPage> {
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                'Pull down to refresh or make sure other\nZipline users are on your network',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-              const SizedBox(height: 20),
-              FilledButton.icon(
-                onPressed: _refreshPeers,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Refresh Buddies'),
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                ),
-              ),
             ],
           ),
         ),
