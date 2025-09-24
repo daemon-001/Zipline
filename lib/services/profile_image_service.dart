@@ -56,7 +56,6 @@ class ProfileImageService {
         return _processImage(bytes);
       }
     } catch (e) {
-      // Silently handle errors
     }
     return null;
   }
@@ -92,7 +91,6 @@ class ProfileImageService {
         }
       }
     } catch (e) {
-      // Silently handle errors
     }
     return null;
   }
@@ -162,7 +160,7 @@ class ProfileImageService {
 
   /// Simple text drawing (basic implementation)
   void _drawText(img.Image image, String text, int x, int y, img.ColorRgb8 color) {
-    // This is a very basic text rendering
+    // Basic text rendering
     // In a real implementation, you'd use a proper font rendering library
     for (int i = 0; i < text.length; i++) {
       final char = text[i];
@@ -175,7 +173,7 @@ class ProfileImageService {
 
   /// Draw a simple character (basic implementation)
   void _drawChar(img.Image image, String char, int x, int y, img.ColorRgb8 color) {
-    // This is a very basic character drawing
+    // Basic character drawing
     // In a real implementation, you'd use proper font rendering
     for (int dy = 0; dy < 16; dy++) {
       for (int dx = 0; dx < 12; dx++) {

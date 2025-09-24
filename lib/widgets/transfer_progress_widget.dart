@@ -94,9 +94,9 @@ class TransferProgressWidget extends StatelessWidget {
                   ),
                 ),
                 _buildStatusChip(theme),
-                if (session.status == TransferStatus.inProgress && onCancel != null)
+                if ((session.status == TransferStatus.inProgress || session.status == TransferStatus.waitingForAcceptance) && onCancel != null)
                   IconButton(
-                    icon: Icon(Icons.close, size: 20, color: theme.colorScheme.onSurfaceVariant),
+                    icon: Icon(Icons.close, size: 20, color: theme.colorScheme.error),
                     onPressed: onCancel,
                     tooltip: 'Cancel transfer',
                   ),

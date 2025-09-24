@@ -12,8 +12,8 @@ enum AppTheme {
 
 @JsonSerializable()
 class AppSettings {
-  final String buddyName;
-  final String buddyAvatar;
+  final String deviceName;
+  final String deviceAvatar;
   final String destPath;
   final bool showNotifications;
   final bool startMinimized;
@@ -23,8 +23,8 @@ class AppSettings {
   final bool autoStartOnBoot;
 
   const AppSettings({
-    required this.buddyName,
-    this.buddyAvatar = '',
+    required this.deviceName,
+    this.deviceAvatar = '',
     required this.destPath,
     this.showNotifications = true,
     this.startMinimized = false,
@@ -57,8 +57,8 @@ class AppSettings {
 
   factory AppSettings.fromJson(Map<String, dynamic> json) {
     return AppSettings(
-      buddyName: json['buddyName'] as String,
-      buddyAvatar: json['buddyAvatar'] as String? ?? '',
+      deviceName: json['deviceName'] as String,
+      deviceAvatar: json['deviceAvatar'] as String? ?? '',
       destPath: json['destPath'] as String,
       // Port is now fixed at 6442, ignore any saved port value
       showNotifications: json['showNotifications'] as bool? ?? true,
@@ -75,8 +75,8 @@ class AppSettings {
 
   Map<String, dynamic> toJson() {
     return {
-      'buddyName': buddyName,
-      'buddyAvatar': buddyAvatar,
+      'deviceName': deviceName,
+      'deviceAvatar': deviceAvatar,
       'destPath': destPath,
       'showNotifications': showNotifications,
       'startMinimized': startMinimized,
@@ -88,8 +88,8 @@ class AppSettings {
   }
 
   AppSettings copyWith({
-    String? buddyName,
-    String? buddyAvatar,
+    String? deviceName,
+    String? deviceAvatar,
     String? destPath,
     String? downloadDirectory, // Alias for destPath
     bool? showNotifications,
@@ -100,8 +100,8 @@ class AppSettings {
     bool? autoStartOnBoot,
   }) {
     return AppSettings(
-      buddyName: buddyName ?? this.buddyName,
-      buddyAvatar: buddyAvatar ?? this.buddyAvatar,
+      deviceName: deviceName ?? this.deviceName,
+      deviceAvatar: deviceAvatar ?? this.deviceAvatar,
       destPath: destPath ?? downloadDirectory ?? this.destPath,
       showNotifications: showNotifications ?? this.showNotifications,
       startMinimized: startMinimized ?? this.startMinimized,
@@ -117,8 +117,8 @@ class AppSettings {
       identical(this, other) ||
       other is AppSettings &&
           runtimeType == other.runtimeType &&
-          buddyName == other.buddyName &&
-          buddyAvatar == other.buddyAvatar &&
+          deviceName == other.deviceName &&
+          deviceAvatar == other.deviceAvatar &&
           destPath == other.destPath &&
           showNotifications == other.showNotifications &&
           startMinimized == other.startMinimized &&
@@ -129,8 +129,8 @@ class AppSettings {
 
   @override
   int get hashCode => Object.hash(
-        buddyName,
-        buddyAvatar,
+        deviceName,
+        deviceAvatar,
         destPath,
         showNotifications,
         startMinimized,
@@ -141,11 +141,11 @@ class AppSettings {
       );
 
   @override
-  String toString() => 'AppSettings{buddyName: $buddyName}';
+  String toString() => 'AppSettings{deviceName: $deviceName}';
 }
 
 // Default settings
 AppSettings get defaultSettings => AppSettings(
-      buddyName: SystemInfo.getSystemHostname(), // Use device name as default
+      deviceName: SystemInfo.getSystemHostname(), // Use device name as default
       destPath: '', // Will be set to Downloads/Zipline by the app
     );

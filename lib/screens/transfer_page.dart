@@ -10,8 +10,7 @@ import '../models/transfer_item.dart';
 import '../models/transfer_session.dart';
 import '../services/file_transfer_service.dart';
 import '../services/profile_image_service.dart';
-import '../widgets/buddy_list_item.dart';
-import '../widgets/top_notification.dart';
+import '../widgets/device_list_item.dart';
 
 class TransferPage extends StatefulWidget {
   final Peer peer;
@@ -88,8 +87,8 @@ class _TransferPageState extends State<TransferPage>
             // Header with back button and title
             _buildHeader(context, theme),
             
-            // Buddy details section
-            _buildBuddyDetails(context, theme),
+            // Device details section
+            _buildDeviceDetails(context, theme),
             
             // Main transfer content
             Expanded(
@@ -183,10 +182,10 @@ class _TransferPageState extends State<TransferPage>
     );
   }
 
-  Widget _buildBuddyDetails(BuildContext context, ThemeData theme) {
+  Widget _buildDeviceDetails(BuildContext context, ThemeData theme) {
     return Container(
       margin: const EdgeInsets.all(16),
-      child: BuddyListItem(
+      child: DeviceListItem(
         peer: widget.peer,
         isLocalPeer: false,
         onTap: null, // No tap action needed in transfer page
@@ -515,16 +514,7 @@ class _TransferPageState extends State<TransferPage>
       
       final success = await fileTransfer.sendFiles(widget.peer, items);
       
-      if (success) {
-        if (mounted) {
-          TopNotification.show(
-            context,
-            title: 'Transfer Started',
-            message: 'File transfer has been initiated',
-            type: NotificationType.success,
-          );
-        }
-      } else {
+      if (!success) {
         _showError('Failed to start file transfer');
       }
     } catch (e) {
@@ -535,11 +525,6 @@ class _TransferPageState extends State<TransferPage>
   void _showError(String message) {
     if (_isDisposed || !mounted) return;
     
-    TopNotification.show(
-      context,
-      title: 'Error',
-      message: message,
-      type: NotificationType.error,
-    );
+    // Error silently handled
   }
 }

@@ -84,7 +84,7 @@ Download the latest release from the [Releases](https://github.com/yourusername/
 ### Getting Started
 1. Launch Zipline on your device
 2. The application will automatically discover other Zipline instances on your network
-3. Select a device from the "Buddies" tab to send files
+3. Select a device from the "Devices" tab to send files
 4. Choose files or folders to transfer
 5. Monitor progress in real-time
 
@@ -111,7 +111,7 @@ Download the latest release from the [Releases](https://github.com/yourusername/
 Access settings through the gear icon in the bottom navigation:
 - **Download Directory**: Set custom download location
 - **Network Port**: Configure listening port (default: 6442)
-- **Buddy Name**: Set your display name
+- **Device Name**: Set your display name
 - **History Management**: Clear transfer history
 - **Network Diagnostics**: Test network connectivity and configuration
 
@@ -136,7 +136,7 @@ lib/
 │   └── app_state_provider.dart
 ├── screens/                 # UI screens
 │   ├── main_screen.dart     # Main application screen
-│   ├── buddies_page.dart    # Network discovery
+│   ├── devices_page.dart    # Network discovery
 │   ├── send_page.dart       # File sending
 │   ├── recent_page.dart     # Transfer history
 │   ├── progress_page.dart   # Transfer progress
@@ -146,18 +146,26 @@ lib/
 ├── services/                # Business logic
 │   ├── file_transfer_service.dart    # File transfer logic
 │   ├── peer_discovery_service.dart   # Network discovery
-│   ├── buddy_message.dart            # Network messaging
+│   ├── device_message.dart            # Network messaging
 │   ├── network_utility.dart         # Network utilities
-│   └── progress_dialog_manager.dart # Progress dialog management
+│   ├── progress_dialog_manager.dart # Progress dialog management
+│   ├── avatar_web_server.dart       # Avatar web server
+│   ├── profile_image_service.dart   # Profile image handling
+│   └── save_location_service.dart   # Save location management
 ├── widgets/                 # Reusable UI components
-│   ├── buddy_list_item.dart
+│   ├── device_list_item.dart
 │   ├── tab_bar_widget.dart
 │   ├── tool_bar_widget.dart
 │   ├── transfer_progress_widget.dart
 │   ├── transfer_progress_dialog.dart
+│   ├── transfer_request_dialog.dart
+│   ├── top_notification.dart
+│   ├── user_profile_bar.dart
+│   ├── windows_action_bar.dart
 │   └── network_warning_dialog.dart
 └── utils/                   # Utility functions
-    └── system_info.dart     # System information utilities
+    ├── system_info.dart     # System information utilities
+    └── speed_calculator.dart # Transfer speed calculations
 ```
 
 ### Building
@@ -213,13 +221,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Efficient Networking**: Optimized peer discovery and file transfer protocols
 - **Cross-Platform**: Single codebase for all supported platforms
 - **Modern UI**: Clean, responsive interface with system font integration
+- **Device Discovery**: Automatic network device detection and management
+- **Secure Transfers**: Local network only, no cloud dependencies
 
-## Acknowledgments
-
-- Built with [Flutter](https://flutter.dev/)
-- Inspired by modern file transfer applications
-- Thanks to the Flutter community for excellent packages
-- Emoji icons provided by Unicode Consortium
 
 ## Support
 

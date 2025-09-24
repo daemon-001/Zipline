@@ -11,12 +11,13 @@ import '../services/progress_dialog_manager.dart';
 import '../services/network_utility.dart';
 import '../services/save_location_service.dart';
 import '../widgets/network_warning_dialog.dart';
-import '../widgets/top_notification.dart';
 import '../widgets/tab_bar_widget.dart';
 import '../widgets/user_profile_bar.dart';
 import '../widgets/transfer_request_dialog.dart';
+import '../widgets/insufficient_space_dialog.dart';
+import '../utils/disk_space_utility.dart';
 import '../widgets/windows_action_bar.dart';
-import 'buddies_page.dart';
+import 'devices_page.dart';
 import 'recent_page.dart';
 import 'about_page.dart';
 import 'settings_page.dart';
@@ -38,6 +39,9 @@ class _MainScreenState extends State<MainScreen> {
   Peer? _selectedPeer;
   Peer? _localPeer;
   final SaveLocationService _saveLocationService = SaveLocationService();
+  
+  // Track open transfer request dialogs by transferId to dismiss them on cancel
+  final Map<String, VoidCallback> _openTransferDialogs = {};
 
   @override
   void initState() {
@@ -47,6 +51,7 @@ class _MainScreenState extends State<MainScreen> {
 
   Future<void> _handleIncomingTransferRequest(Map<String, dynamic> requestData) async {
     final senderPeer = requestData['senderPeer'] as Peer;
+    final totalSize = requestData['totalSize'] as int;
     
     // Get the best save location for this peer
     await _saveLocationService.initialize();
@@ -57,6 +62,18 @@ class _MainScreenState extends State<MainScreen> {
     
     // Show the transfer request dialog
     if (mounted) {
+      final transferId = requestData['transferId'] as String;
+      
+      // Store the dismiss callback for this transfer
+      VoidCallback? dismissCallback;
+      dismissCallback = () {
+        if (mounted) {
+          Navigator.of(context).pop();
+          _openTransferDialogs.remove(transferId);
+        }
+      };
+      _openTransferDialogs[transferId] = dismissCallback;
+      
       showDialog<void>(
         context: context,
         barrierDismissible: false,
@@ -64,12 +81,45 @@ class _MainScreenState extends State<MainScreen> {
           requestData: requestData,
           currentSaveLocation: currentSaveLocation,
           onResponse: (accepted, saveLocation, remember, reason) async {
+            _openTransferDialogs.remove(transferId);
             Navigator.of(context).pop();
             
             final peerDiscovery = Provider.of<PeerDiscoveryService>(context, listen: false);
-            final transferId = requestData['transferId'] as String;
             
             if (accepted && saveLocation != null) {
+              // Check if there's enough space before accepting
+              final hasEnoughSpace = await DiskSpaceUtility.hasEnoughSpace(saveLocation, totalSize);
+              
+              if (!hasEnoughSpace) {
+                // Show insufficient space dialog
+                await _showInsufficientSpaceDialog(
+                  context: context,
+                  currentPath: saveLocation,
+                  requiredSpace: totalSize,
+                  availableSpace: await DiskSpaceUtility.getAvailableSpace(saveLocation),
+                  onDirectoryChanged: (newPath) async {
+                    // Update the save location and try again
+                    await _handleDirectoryChange(
+                      newPath: newPath,
+                      remember: remember,
+                      senderPeer: senderPeer,
+                      transferId: transferId,
+                      totalSize: totalSize,
+                      peerDiscovery: peerDiscovery,
+                    );
+                  },
+                  onCancel: () async {
+                    // Send decline
+                    peerDiscovery.sendTransferDecline(
+                      targetPeer: senderPeer,
+                      transferId: transferId,
+                      reason: 'Insufficient storage space',
+                    );
+                  },
+                );
+                return;
+              }
+              
               // If user chose to remember this location, save it as default location
               if (remember) {
                 await _saveLocationService.setDefaultLocation(saveLocation);
@@ -109,6 +159,107 @@ class _MainScreenState extends State<MainScreen> {
         ),
       );
     }
+  }
+
+  void _handleTransferCancel(Map<String, dynamic> cancelData) {
+    final transferId = cancelData['transferId'] as String?;
+    
+    if (transferId != null) {
+      // Dismiss any open transfer request dialog for this transfer
+      final dismissCallback = _openTransferDialogs.remove(transferId);
+      dismissCallback?.call();
+    }
+  }
+
+  Future<void> _showInsufficientSpaceDialog({
+    required BuildContext context,
+    required String currentPath,
+    required int requiredSpace,
+    required int availableSpace,
+    required Function(String) onDirectoryChanged,
+    required VoidCallback onCancel,
+  }) async {
+    if (!mounted) return;
+    
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => InsufficientSpaceDialog(
+        currentPath: currentPath,
+        requiredSpace: requiredSpace,
+        availableSpace: availableSpace,
+        onChangeDirectory: onDirectoryChanged,
+        onCancel: onCancel,
+      ),
+    );
+  }
+
+  Future<void> _handleDirectoryChange({
+    required String newPath,
+    required bool remember,
+    required Peer senderPeer,
+    required String transferId,
+    required int totalSize,
+    required PeerDiscoveryService peerDiscovery,
+  }) async {
+    // Check space in the new directory
+    final hasEnoughSpace = await DiskSpaceUtility.hasEnoughSpace(newPath, totalSize);
+    
+    if (!hasEnoughSpace) {
+      // Show insufficient space dialog again for the new location
+      await _showInsufficientSpaceDialog(
+        context: context,
+        currentPath: newPath,
+        requiredSpace: totalSize,
+        availableSpace: await DiskSpaceUtility.getAvailableSpace(newPath),
+        onDirectoryChanged: (anotherNewPath) async {
+          await _handleDirectoryChange(
+            newPath: anotherNewPath,
+            remember: remember,
+            senderPeer: senderPeer,
+            transferId: transferId,
+            totalSize: totalSize,
+            peerDiscovery: peerDiscovery,
+          );
+        },
+        onCancel: () async {
+          peerDiscovery.sendTransferDecline(
+            targetPeer: senderPeer,
+            transferId: transferId,
+            reason: 'Insufficient storage space',
+          );
+        },
+      );
+      return;
+    }
+    
+    // If user chose to remember this location, save it as default location
+    if (remember) {
+      await _saveLocationService.setDefaultLocation(newPath);
+      
+      // Also update the app settings with the new default location
+      final appState = Provider.of<AppStateProvider>(context, listen: false);
+      if (appState.settings != null) {
+        final settings = appState.settings!;
+        final updatedSettings = settings.copyWith(destPath: newPath);
+        appState.updateSettings(updatedSettings);
+      }
+    }
+    
+    // Register the incoming transfer with the file transfer service
+    final fileTransferService = Provider.of<FileTransferService>(context, listen: false);
+    fileTransferService.registerIncomingTransfer(
+      transferId: transferId,
+      senderAddress: senderPeer.address,
+      customSaveLocation: newPath,
+    );
+    
+    // Send acceptance
+    peerDiscovery.sendTransferAccept(
+      targetPeer: senderPeer,
+      transferId: transferId,
+      saveLocation: newPath,
+    );
   }
 
   @override
@@ -169,23 +320,12 @@ class _MainScreenState extends State<MainScreen> {
         }
       }
       
-      // Check network interfaces and show info if multiple
-      final networkInterfaces = await NetworkUtility.getNetworkInterfaces();
-      if (mounted && networkInterfaces.length > 1) {
-        final interfaceList = networkInterfaces
-            .map((interface) => '${interface.type} (${interface.name}): ${interface.address}')
-            .toList();
-        
-        await NetworkWarningDialog.showNetworkInterfaceDialog(
-          context: context,
-          interfaces: interfaceList,
-        );
-      }
+      // Network interfaces check removed - no longer showing warning dialog
       
       // Start peer discovery service
       final discoveryStarted = await peerDiscovery.start(
         port: AppSettings.port,
-        buddyName: settings.buddyName,
+        deviceName: settings.deviceName,
         platform: 'Windows',
       );
 
@@ -193,7 +333,6 @@ class _MainScreenState extends State<MainScreen> {
         throw Exception('Failed to start peer discovery');
       }
       
-      // BUGFIX: Start network monitoring to detect interface changes
       _startNetworkMonitoring(peerDiscovery);
 
       // Update file transfer service with settings
@@ -234,6 +373,8 @@ class _MainScreenState extends State<MainScreen> {
             session,
             onCancel: () {
               fileTransfer.cancelTransfer(session.id);
+              // Immediately hide the progress dialog when user cancels
+              ProgressDialogManager.instance.hideProgress();
             },
           );
         }
@@ -264,6 +405,24 @@ class _MainScreenState extends State<MainScreen> {
       peerDiscovery.onTransferRequest.listen((requestData) {
         if (mounted) {
           _handleIncomingTransferRequest(requestData);
+        }
+      });
+      
+      // Listen for transfer cancellations to dismiss dialogs
+      peerDiscovery.onTransferCancel.listen((cancelData) {
+        if (mounted) {
+          _handleTransferCancel(cancelData);
+        }
+      });
+      
+      // Listen for transfer responses to hide progress dialog on decline
+      peerDiscovery.onTransferResponse.listen((responseData) {
+        if (mounted) {
+          final responseType = responseData['responseType'] as String?;
+          if (responseType == 'decline') {
+            // Hide progress dialog when receiver declines
+            ProgressDialogManager.instance.hideProgress();
+          }
         }
       });
 
@@ -331,13 +490,13 @@ class _MainScreenState extends State<MainScreen> {
 
     switch (_currentPageIndex) {
       case 0:
-        return BuddiesPage(onPeerSelected: showTransferPage);
+        return DevicesPage(onPeerSelected: showTransferPage);
       case 1:
         return const RecentPage();
       case 2:
         return const AboutPage();
       default:
-        return BuddiesPage(onPeerSelected: showTransferPage);
+        return DevicesPage(onPeerSelected: showTransferPage);
     }
   }
 
@@ -464,7 +623,6 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  // BUGFIX: Monitor network interfaces for changes  
   // Reduced frequency since PeerDiscoveryService now has its own network watcher
   void _startNetworkMonitoring(PeerDiscoveryService peerDiscovery) {
     Timer.periodic(const Duration(minutes: 2), (timer) async {
@@ -485,7 +643,6 @@ class _MainScreenState extends State<MainScreen> {
           _lastInterfaceCount = currentInterfaces.length;
         }
       } catch (e) {
-        // Silently handle network monitoring errors
       }
     });
   }
@@ -495,7 +652,7 @@ class _MainScreenState extends State<MainScreen> {
   void _createLocalPeer(AppSettings settings) {
     _localPeer = Peer(
       id: 'local',
-      name: settings.buddyName,
+      name: settings.deviceName,
       address: '127.0.0.1', // Will be updated with actual IP
       port: AppSettings.port,
       platform: 'Windows',

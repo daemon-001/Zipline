@@ -68,10 +68,10 @@ class SystemInfo {
     return '${getSystemHostname()} (${getPlatformName()})';
   }
 
-  /// Get the username with buddy name override
-  static String getUsername([String? buddyName]) {
-    if (buddyName != null && buddyName.isNotEmpty) {
-      return buddyName;
+  /// Get the username with device name override
+  static String getUsername([String? deviceName]) {
+    if (deviceName != null && deviceName.isNotEmpty) {
+      return deviceName;
     }
     return getSystemUsername();
   }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../widgets/top_notification.dart';
 import '../services/network_utility.dart';
 
 class IpPage extends StatefulWidget {
@@ -652,23 +651,8 @@ class _IpPageState extends State<IpPage> {
   void _copyToClipboard(String text) async {
     try {
       await Clipboard.setData(ClipboardData(text: text));
-      if (mounted) {
-        TopNotification.show(
-          context,
-          title: 'IP Address Copied',
-          message: text,
-          type: NotificationType.success,
-        );
-      }
     } catch (e) {
-      if (mounted) {
-        TopNotification.show(
-          context,
-          title: 'Copy Failed',
-          message: 'Failed to copy to clipboard',
-          type: NotificationType.error,
-        );
-      }
+      // Error silently handled
     }
   }
 }

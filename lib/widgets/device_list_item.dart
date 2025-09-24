@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import '../models/peer.dart';
 import '../services/profile_image_service.dart';
 
-class BuddyListItem extends StatelessWidget {
+class DeviceListItem extends StatelessWidget {
   final Peer peer;
   final VoidCallback? onTap;
   final bool isLocalPeer;
   final VoidCallback? onIpAddressesPressed;
 
-  const BuddyListItem({
+  const DeviceListItem({
     super.key,
     required this.peer,
     this.onTap,
@@ -350,6 +350,15 @@ class BuddyListItem extends StatelessWidget {
       case 'wifi':
       case 'wireless':
         return 'WiFi';
+      case 'hotspot':
+        return 'HOTSPOT';
+      case 'virtual':
+        return 'VIRTUAL';
+      case 'mobile':
+        return 'MOBILE';
+      case 'bluetooth':
+        return 'BLUETOOTH';
+      case 'tunnel':
       case 'vpn':
         return 'VPN';
       case 'loopback':
@@ -368,12 +377,21 @@ class BuddyListItem extends StatelessWidget {
       case 'wifi':
       case 'wireless':
         return const Color(0xFF2196F3); // Modern blue
+      case 'hotspot':
+        return const Color(0xFF00BCD4); // Modern cyan
+      case 'virtual':
+        return const Color(0xFF9C27B0); // Modern purple
+      case 'mobile':
+        return const Color(0xFFE91E63); // Modern pink
+      case 'bluetooth':
+        return const Color(0xFF3F51B5); // Modern indigo
+      case 'tunnel':
       case 'vpn':
         return const Color(0xFFFF9800); // Modern orange
       case 'loopback':
         return const Color(0xFF9E9E9E); // Modern grey
       case 'network':
-        return const Color(0xFF9C27B0); // Modern purple
+        return const Color(0xFF795548); // Modern brown
       default:
         return const Color(0xFF9E9E9E); // Modern grey
     }

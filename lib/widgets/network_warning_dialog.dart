@@ -192,7 +192,7 @@ class NetworkWarningDialog extends StatelessWidget {
       
       if (conflictingApp.toLowerCase().contains('zipline')) {
         suggestion = 'Another instance of Zipline is already running. Please close the other instance and try again.';
-      } else if (conflictingApp.toLowerCase().contains('dukto') || conflictingApp.toLowerCase().contains('file transfer')) {
+      } else if (conflictingApp.toLowerCase().contains('file transfer')) {
         suggestion = 'Another file transfer application is using this port. Please close it and try again.';
       } else {
         suggestion = 'Please close "$conflictingApp" and try again.';

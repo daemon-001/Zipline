@@ -7,7 +7,6 @@ import '../providers/app_state_provider.dart';
 import '../services/file_transfer_service.dart';
 import '../models/app_settings.dart';
 import '../utils/system_info.dart';
-import '../widgets/top_notification.dart';
 
 class SettingsPage extends StatefulWidget {
   final VoidCallback onBack;
@@ -40,7 +39,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final settings = Provider.of<AppStateProvider>(context, listen: false).settings;
     
     // Initialize current values
-    final name = settings?.buddyName ?? SystemInfo.getSystemHostname();
+    final name = settings?.deviceName ?? SystemInfo.getSystemHostname();
     final path = settings?.destPath ?? '';
     _showNotifications = settings?.showNotifications ?? true;
     _startMinimized = settings?.startMinimized ?? false;
@@ -201,7 +200,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   'User Settings',
                   [
                     _buildTextField(
-                      'Buddy Name',
+                      'Device Name',
                       _nameController,
                       'Your name visible to others',
                     ),
@@ -738,14 +737,7 @@ class _SettingsPageState extends State<SettingsPage> {
         _checkForChanges();
       }
     } catch (e) {
-      if (mounted) {
-        TopNotification.show(
-          context,
-          title: 'Folder Selection Error',
-          message: 'Error selecting folder: $e',
-          type: NotificationType.error,
-        );
-      }
+      // Error silently handled
     }
   }
 
@@ -758,17 +750,11 @@ class _SettingsPageState extends State<SettingsPage> {
     
     final appState = Provider.of<AppStateProvider>(context, listen: false);
     
-    // Validate buddy name
+    // Validate device name
     if (_nameController.text.trim().isEmpty) {
       setState(() {
         _isSaving = false;
       });
-      TopNotification.show(
-        context,
-        title: 'Missing Buddy Name',
-        message: 'Please enter a buddy name',
-        type: NotificationType.error,
-      );
       return;
     }
     
@@ -776,12 +762,12 @@ class _SettingsPageState extends State<SettingsPage> {
     await Future.delayed(const Duration(milliseconds: 800));
     
     final currentSettings = appState.settings ?? AppSettings(
-      buddyName: SystemInfo.getSystemHostname(),
+      deviceName: SystemInfo.getSystemHostname(),
       destPath: '',
     );
     
     final newSettings = currentSettings.copyWith(
-      buddyName: _nameController.text.trim(),
+      deviceName: _nameController.text.trim(),
       destPath: _pathController.text.trim(),
       showNotifications: _showNotifications,
       startMinimized: _startMinimized,
@@ -795,13 +781,6 @@ class _SettingsPageState extends State<SettingsPage> {
     });
     
     if (mounted) {
-      TopNotification.show(
-        context,
-        title: 'Settings Saved',
-        message: 'Your settings have been saved successfully',
-        type: NotificationType.success,
-      );
-      
       // Go back after saving
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
@@ -1007,12 +986,6 @@ class _SettingsPageState extends State<SettingsPage> {
             onPressed: () {
               Provider.of<FileTransferService>(context, listen: false).clearHistory();
               Navigator.of(context).pop();
-              TopNotification.show(
-                context,
-                title: 'History Cleared',
-                message: 'Transfer history has been cleared',
-                type: NotificationType.success,
-              );
             },
             icon: const Icon(Icons.delete_forever, size: 16),
             label: const Text('Clear History'),

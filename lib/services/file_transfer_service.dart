@@ -90,11 +90,27 @@ class FileTransferService extends ChangeNotifier {
   void cancelTransfer(String sessionId) {
     final session = _activeSessions[sessionId];
     if (session != null) {
+      // Send cancel notification to receiver if waiting for acceptance
+      if (session.status == TransferStatus.waitingForAcceptance && _peerDiscovery != null) {
+        _peerDiscovery!.sendTransferCancel(
+          targetPeer: session.peer,
+          transferId: sessionId,
+          reason: 'Transfer cancelled by sender',
+        );
+      }
+      
+      // If transfer is waiting for acceptance, complete the completer to stop waiting
+      final completer = _transferRequestCompleters.remove(sessionId);
+      if (completer != null && !completer.isCompleted) {
+        completer.complete(false);
+      }
+      
       final cancelledSession = session.copyWith(
         status: TransferStatus.cancelled,
         completedAt: DateTime.now(),
       );
-      _sessionFailedController.add(cancelledSession);
+      
+      // Don't show popup for cancelled transfers - move directly to completed
       _moveToCompleted(cancelledSession);
     }
   }
@@ -261,12 +277,7 @@ class FileTransferService extends ChangeNotifier {
         final completer = Completer<bool>();
         _transferRequestCompleters[session.id] = completer;
         
-        Timer(const Duration(seconds: 30), () {
-          if (!completer.isCompleted) {
-            _transferRequestCompleters.remove(session.id);
-            completer.complete(false);
-          }
-        });
+        // Removed auto-cancel timeout - transfers will wait indefinitely for receiver response
         
         final waitingSession = session.copyWith(status: TransferStatus.waitingForAcceptance);
         _activeSessions[session.id] = waitingSession;
@@ -281,10 +292,10 @@ class FileTransferService extends ChangeNotifier {
         } else {
           final rejectedSession = session.copyWith(
             status: TransferStatus.cancelled,
-            error: 'Transfer request was rejected or timed out',
+            error: 'Transfer request was rejected or cancelled',
             completedAt: DateTime.now(),
           );
-          _sessionFailedController.add(rejectedSession);
+          // Don't show popup for rejected/declined transfers - move directly to completed
           _moveToCompleted(rejectedSession);
           return false;
         }
@@ -688,7 +699,6 @@ class FileTransferService extends ChangeNotifier {
     TransferSession? session;
 
     try {
-      // Transfer: Process data stream exactly like original
       await for (final chunk in socket) {
         int chunkIndex = 0;
         
@@ -767,7 +777,6 @@ class FileTransferService extends ChangeNotifier {
                 currentFileBytesReceived = 0;
                 
                 if (currentFileSize == -1) {
-                  // Transfer: DIRECTORY - create and move to next element (like receiver.cpp)
                   await _createDirectory(currentFileName, sessionId);
                   currentElements++; // Like sessionElementsReceived++
                   
@@ -794,13 +803,10 @@ class FileTransferService extends ChangeNotifier {
                     session = updatedSession;
                   }
                   
-                  // Transfer: Check if more elements remain (like original receiver.cpp)
                   if (currentElements < totalElements) {
                     recvStatus = 2; // PHASE_ELEMENT_NAME - next element
-                    // Transfer: Break and continue processing next element
                     break;
                   } else {
-                    // Transfer: All elements received - endSession() with 100% progress
                     final completedSession = session!.copyWith(
                         status: TransferStatus.completed,
                         completedAt: DateTime.now(),
@@ -832,9 +838,7 @@ class FileTransferService extends ChangeNotifier {
                 final elementData = chunk.sublist(chunkIndex, chunkIndex + bytesToProcess);
                 chunkIndex += bytesToProcess;
                 
-                // Transfer: High-performance I/O - batch writes for better performance
                 if (currentFileName == textElementName) {
-                  // Text element - could accumulate for processing
                 } else {
                   // File element - write directly to disk (RandomAccessFile is already buffered)
                   await currentFile!.writeFrom(elementData);
@@ -1056,7 +1060,18 @@ class FileTransferService extends ChangeNotifier {
 
     filePath = _getUniqueFilePath(filePath);
     
+    // Check available space before creating the file
     final file = File(filePath);
+    final parentDir = Directory(path.dirname(filePath));
+    
+    // Check if we can write to the directory (basic space check)
+    try {
+      final testFile = File(path.join(parentDir.path, '.zipline_space_test_${DateTime.now().millisecondsSinceEpoch}'));
+      await testFile.create();
+      await testFile.delete();
+    } catch (e) {
+      throw Exception('Insufficient space or write permission denied: ${e.toString()}');
+    }
     
     await file.create();
     return file;
@@ -1079,6 +1094,16 @@ class FileTransferService extends ChangeNotifier {
     } else {
       uniqueDirPath = _getUniqueDirectoryPath(originalDirPath);
       _sessionPathMappings[sessionId]![dirName] = uniqueDirPath;
+    }
+    
+    // Check if we can create directories in the parent directory
+    final parentDir = Directory(path.dirname(uniqueDirPath));
+    try {
+      final testFile = File(path.join(parentDir.path, '.zipline_space_test_${DateTime.now().millisecondsSinceEpoch}'));
+      await testFile.create();
+      await testFile.delete();
+    } catch (e) {
+      throw Exception('Insufficient space or write permission denied for directory creation: ${e.toString()}');
     }
     
     final dir = Directory(uniqueDirPath);

@@ -39,7 +39,7 @@ class ZiplineTabBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _buildTab('Buddies', Icons.people_outline, 0, context),
+          _buildTab('Devices', Icons.people_outline, 0, context),
           _buildTab('Recent', Icons.history, 1, context),
           _buildTab('About', Icons.info_outline, 2, context),
         ],

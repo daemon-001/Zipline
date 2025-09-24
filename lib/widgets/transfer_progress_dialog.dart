@@ -344,8 +344,8 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
           ],
         ),
       );
-    } else if (status == TransferStatus.inProgress && widget.onCancel != null) {
-      // Show Cancel button for in-progress transfers
+    } else if ((status == TransferStatus.inProgress || status == TransferStatus.waitingForAcceptance) && widget.onCancel != null) {
+      // Show Cancel/Abort button for in-progress and waiting transfers
       return Container(
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         child: Row(
@@ -358,6 +358,8 @@ class _TransferProgressDialogState extends State<TransferProgressDialog>
               icon: const Icon(Icons.close, size: 16),
               label: const Text('Cancel'),
               style: OutlinedButton.styleFrom(
+                foregroundColor: theme.colorScheme.error,
+                side: BorderSide(color: theme.colorScheme.error),
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),

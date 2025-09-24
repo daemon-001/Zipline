@@ -97,15 +97,17 @@ class _WindowsActionBarState extends State<WindowsActionBar> with WindowListener
           // Extended drag area for moving window - covers most of the action bar
           Expanded(
             child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onPanStart: (details) {
                 windowManager.startDragging();
               },
-              onTap: () {
+              onDoubleTap: () {
                 // Double tap to maximize/restore
                 _maximizeWindow();
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                color: Colors.transparent, // Ensure hit testing works properly
                 child: Row(
                   children: [
                     // App icon

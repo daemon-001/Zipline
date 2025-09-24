@@ -9,7 +9,8 @@ enum MessageType {
   helloPortUnicast(0x05),
   transferRequest(0x06),
   transferAccept(0x07),
-  transferDecline(0x08);
+  transferDecline(0x08),
+  transferCancel(0x09);
 
   const MessageType(this.value);
   final int value;
@@ -28,7 +29,7 @@ enum MessageType {
       withPort ? MessageType.helloPortUnicast : MessageType.helloUnicast;
 }
 
-class BuddyMessage {
+class DeviceMessage {
   final MessageType type;
   final int port;
   final String signature;
@@ -42,7 +43,7 @@ class BuddyMessage {
   final String? transferDescription;
   final List<String>? fileNames;
 
-  const BuddyMessage({
+  const DeviceMessage({
     required this.type,
     required this.port,
     required this.signature,
@@ -57,14 +58,14 @@ class BuddyMessage {
 
   bool get isValid => type != MessageType.invalid;
 
-  static BuddyMessage goodbye() => const BuddyMessage(
+  static DeviceMessage goodbye() => const DeviceMessage(
         type: MessageType.goodbye,
         port: 0,
         signature: '',
       );
 
   // Factory constructor for transfer request messages
-  factory BuddyMessage.transferRequest({
+  factory DeviceMessage.transferRequest({
     required String transferId,
     required String senderSignature,
     required int totalFiles,
@@ -72,7 +73,7 @@ class BuddyMessage {
     required String transferDescription,
     List<String>? fileNames,
   }) {
-    return BuddyMessage(
+    return DeviceMessage(
       type: MessageType.transferRequest,
       port: 0,
       signature: senderSignature,
@@ -85,12 +86,12 @@ class BuddyMessage {
   }
 
   // Factory constructor for transfer accept messages
-  factory BuddyMessage.transferAccept({
+  factory DeviceMessage.transferAccept({
     required String transferId,
     required String receiverSignature,
     String? saveLocation,
   }) {
-    return BuddyMessage(
+    return DeviceMessage(
       type: MessageType.transferAccept,
       port: 0,
       signature: receiverSignature,
@@ -100,12 +101,12 @@ class BuddyMessage {
   }
 
   // Factory constructor for transfer decline messages
-  factory BuddyMessage.transferDecline({
+  factory DeviceMessage.transferDecline({
     required String transferId,
     required String receiverSignature,
     String? reason,
   }) {
-    return BuddyMessage(
+    return DeviceMessage(
       type: MessageType.transferDecline,
       port: 0,
       signature: receiverSignature,
@@ -114,16 +115,31 @@ class BuddyMessage {
     );
   }
 
-  static BuddyMessage parse(List<int> data) {
+  // Factory constructor for transfer cancel messages (sent by sender)
+  factory DeviceMessage.transferCancel({
+    required String transferId,
+    required String senderSignature,
+    String? reason,
+  }) {
+    return DeviceMessage(
+      type: MessageType.transferCancel,
+      port: 0,
+      signature: senderSignature,
+      transferId: transferId,
+      transferDescription: reason,
+    );
+  }
+
+  static DeviceMessage parse(List<int> data) {
     try {
-      if (data.isEmpty) return const BuddyMessage(type: MessageType.invalid, port: 0, signature: '');
+      if (data.isEmpty) return const DeviceMessage(type: MessageType.invalid, port: 0, signature: '');
 
       // Message format: first byte is message type
       final typeValue = data[0];
       final type = MessageType.fromValue(typeValue);
 
       if (type == MessageType.invalid) {
-        return const BuddyMessage(type: MessageType.invalid, port: 0, signature: '');
+        return const DeviceMessage(type: MessageType.invalid, port: 0, signature: '');
       }
 
       int port = 0;
@@ -192,21 +208,22 @@ class BuddyMessage {
           
         case MessageType.transferAccept:
         case MessageType.transferDecline:
+        case MessageType.transferCancel:
           // Format: [type][response_data_json_utf8]
           if (data.length > 1) {
             final jsonStr = utf8.decode(data.skip(1).toList());
             final responseData = json.decode(jsonStr);
             signature = responseData['signature'] ?? '';
             transferId = responseData['transferId'];
-            transferDescription = responseData['data']; // Save location or decline reason
+            transferDescription = responseData['data']; // Save location, decline reason, or cancel reason
           }
           break;
           
         default:
-          return const BuddyMessage(type: MessageType.invalid, port: 0, signature: '');
+          return const DeviceMessage(type: MessageType.invalid, port: 0, signature: '');
       }
 
-      return BuddyMessage(
+      return DeviceMessage(
         type: type,
         port: port,
         signature: signature,
@@ -219,16 +236,16 @@ class BuddyMessage {
         fileNames: fileNames,
       );
     } catch (e) {
-      return const BuddyMessage(type: MessageType.invalid, port: 0, signature: '');
+      return const DeviceMessage(type: MessageType.invalid, port: 0, signature: '');
     }
   }
 
   // Alias for compatibility with optimized services
-  static BuddyMessage deserialize(List<int> data) => parse(data);
-  static BuddyMessage fromBytes(List<int> data) => parse(data);
+  static DeviceMessage deserialize(List<int> data) => parse(data);
+  static DeviceMessage fromBytes(List<int> data) => parse(data);
   
   // Additional properties for compatibility
-  String? get buddyName => signature.isNotEmpty ? signature : null;
+  String? get deviceName => signature.isNotEmpty ? signature : null;
 
   List<int> serialize() {
     final result = <int>[];
@@ -286,11 +303,12 @@ class BuddyMessage {
         
       case MessageType.transferAccept:
       case MessageType.transferDecline:
+      case MessageType.transferCancel:
         // Format: [type][response_data_json_utf8]
         final responseData = {
           'signature': signature,
           'transferId': transferId,
-          'data': transferDescription, // Save location or decline reason
+          'data': transferDescription, // Save location, decline reason, or cancel reason
         };
         result.addAll(utf8.encode(json.encode(responseData)));
         break;
@@ -306,5 +324,5 @@ class BuddyMessage {
   List<int> toBytes() => serialize();
 
   @override
-  String toString() => 'BuddyMessage{type: $type, port: $port, signature: $signature}';
+  String toString() => 'DeviceMessage{type: $type, port: $port, signature: $signature}';
 }

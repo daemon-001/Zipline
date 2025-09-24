@@ -2,19 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/peer_discovery_service.dart';
 import '../models/peer.dart';
-import '../widgets/buddy_list_item.dart';
+import '../widgets/device_list_item.dart';
 import 'transfer_page.dart';
 
-class BuddiesPage extends StatefulWidget {
+class DevicesPage extends StatefulWidget {
   final Function(Peer)? onPeerSelected;
   
-  const BuddiesPage({super.key, this.onPeerSelected});
+  const DevicesPage({super.key, this.onPeerSelected});
 
   @override
-  State<BuddiesPage> createState() => _BuddiesPageState();
+  State<DevicesPage> createState() => _DevicesPageState();
 }
 
-class _BuddiesPageState extends State<BuddiesPage> {
+class _DevicesPageState extends State<DevicesPage> {
   bool _isRefreshing = false;
 
   @override
@@ -23,16 +23,26 @@ class _BuddiesPageState extends State<BuddiesPage> {
   }
 
   Future<void> _refreshPeers() async {
+    // Prevent multiple refreshes
+    if (_isRefreshing) return;
+    
     setState(() {
       _isRefreshing = true;
     });
     
-    final peerDiscovery = Provider.of<PeerDiscoveryService>(context, listen: false);
-    await peerDiscovery.refreshNeighbors();
-    
-    setState(() {
-      _isRefreshing = false;
-    });
+    try {
+      final peerDiscovery = Provider.of<PeerDiscoveryService>(context, listen: false);
+      await peerDiscovery.refreshNeighbors();
+      
+      // Add a small delay to show the refresh animation
+      await Future.delayed(Duration(milliseconds: 500));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
+    }
   }
 
   void _onPeerSelected(Peer peer) {
@@ -70,7 +80,7 @@ class _BuddiesPageState extends State<BuddiesPage> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Refreshing Buddies...',
+                      'Refreshing Devices...',
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
                         fontSize: 14,
@@ -81,7 +91,7 @@ class _BuddiesPageState extends State<BuddiesPage> {
                 ),
               ),
             Expanded(
-              child: _buildBuddiesList(),
+              child: _buildDevicesList(),
             ),
           ],
         ),
@@ -91,7 +101,7 @@ class _BuddiesPageState extends State<BuddiesPage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Theme.of(context).colorScheme.onPrimary,
         elevation: 6,
-        tooltip: _isRefreshing ? 'Refreshing...' : 'Refresh Buddies',
+        tooltip: _isRefreshing ? 'Refreshing...' : 'Refresh Devices',
         child: _isRefreshing
             ? SizedBox(
                 width: 20,
@@ -108,7 +118,7 @@ class _BuddiesPageState extends State<BuddiesPage> {
     );
   }
 
-  Widget _buildBuddiesList() {
+  Widget _buildDevicesList() {
     return Consumer<PeerDiscoveryService>(
       builder: (context, peerDiscovery, child) {
         final peers = peerDiscovery.discoveredPeers;
@@ -123,7 +133,7 @@ class _BuddiesPageState extends State<BuddiesPage> {
           itemBuilder: (context, index) {
             final peer = peers[index];
             
-            return BuddyListItem(
+            return DeviceListItem(
               peer: peer,
               isLocalPeer: false,
               onTap: () => _onPeerSelected(peer),
@@ -158,13 +168,20 @@ class _BuddiesPageState extends State<BuddiesPage> {
               ),
               const SizedBox(height: 16),
               Text(
-                'No buddies found',
+                'No devices found',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   color: theme.colorScheme.onSurface,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 8),
+              Text(
+                'Make sure that other device connected to the network',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withOpacity(0.7),
+                ),
+                textAlign: TextAlign.center,
+              ),
             ],
           ),
         ),

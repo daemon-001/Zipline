@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
 import '../models/peer.dart';
 import '../utils/system_info.dart';
-import 'buddy_message.dart';
+import 'device_message.dart';
 import 'network_utility.dart';
 import 'avatar_web_server.dart';
 
@@ -17,37 +17,35 @@ import 'avatar_web_server.dart';
 /// - Smart peer timeout management for WiFi stability
 class PeerDiscoveryService extends ChangeNotifier {
   static const int defaultPort = 6442; // Updated default port
-  static const Duration heartbeatInterval = Duration(seconds: 30); // Faster heartbeat for better discovery
-  static const Duration initialDiscoveryInterval = Duration(seconds: 2); // Quick initial discovery
-  static const Duration peerTimeout = Duration(minutes: 3); // Peers timeout after 3 minutes of inactivity
+  static const Duration heartbeatInterval = Duration(seconds: 60); // Regular heartbeat to prevent flooding
+  static const Duration initialDiscoveryInterval = Duration(seconds: 3); // Initial discovery interval
+  static const Duration peerTimeout = Duration(minutes: 2); // Peers timeout after 2 minutes of inactivity
   
-  // Transfer: Single UDP socket bound to any interface
   RawDatagramSocket? _socket;
   Timer? _heartbeatTimer;
   Timer? _initialDiscoveryTimer;
   Timer? _networkWatchTimer;
   Timer? _peerCleanupTimer;
 
-  // Transfer: Simplified peer storage - key is IP address like original
+  // Store peers by composite key: "ip:port:connectionType" to support multiple paths
   final Map<String, Peer> _peers = {};
   
-  // Transfer: Broadcast storm protection exactly like messenger.cpp
   final Map<String, int> _localAddressCount = {};
   final Set<String> _badAddresses = {};
 
   final StreamController<Peer> _peerFoundController = StreamController<Peer>.broadcast();
   final StreamController<Peer> _peerLostController = StreamController<Peer>.broadcast();
   
-  // Transfer request stream controllers
   final StreamController<Map<String, dynamic>> _transferRequestController = StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _transferResponseController = StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _transferCancelController = StreamController<Map<String, dynamic>>.broadcast();
   
   Stream<Peer> get onPeerFound => _peerFoundController.stream;
   Stream<Peer> get onPeerLost => _peerLostController.stream;
   
-  // Transfer request streams
   Stream<Map<String, dynamic>> get onTransferRequest => _transferRequestController.stream;
   Stream<Map<String, dynamic>> get onTransferResponse => _transferResponseController.stream;
+  Stream<Map<String, dynamic>> get onTransferCancel => _transferCancelController.stream;
 
   List<Peer> get discoveredPeers => _peers.values.toList();
 
@@ -67,12 +65,15 @@ class PeerDiscoveryService extends ChangeNotifier {
 
   Future<bool> start({
     int port = defaultPort,
-    String? buddyName,
+    String? deviceName,
     String? platform,
   }) async {
     try {
       _listenPort = port;
-      _localSignature = await _generateLocalSignature(buddyName, platform);
+      _localSignature = await _generateLocalSignature(deviceName, platform);
+
+      // Update interface cache before starting
+      await _updateInterfaceCache();
 
       // Start avatar web server
       await AvatarWebServer.instance.start(port);
@@ -114,17 +115,27 @@ class PeerDiscoveryService extends ChangeNotifier {
     
     _peers.clear();
     _localAddressCount.clear();
-    _currentLocalAddresses.clear(); // Transfer: Clear local address tracking
+    _currentLocalAddresses.clear();
     _badAddresses.clear();
     
     notifyListeners();
   }
   
+  DateTime? _lastBroadcastTime;
+  
   Future<void> sayHello() async {
     if (_socket == null) return;
     
+    // Rate limit broadcasts - minimum 1 second between broadcasts
+    final now = DateTime.now();
+    if (_lastBroadcastTime != null && 
+        now.difference(_lastBroadcastTime!).inMilliseconds < 1000) {
+      return;
+    }
+    _lastBroadcastTime = now;
+    
     // Use proper message type based on whether we're using default port
-    final message = BuddyMessage(
+    final message = DeviceMessage(
       type: _listenPort == defaultPort ? MessageType.helloBroadcast : MessageType.helloPortBroadcast,
       port: _listenPort,
       signature: _localSignature,
@@ -135,23 +146,43 @@ class PeerDiscoveryService extends ChangeNotifier {
 
   // Smart refresh - trigger discovery without clearing existing peers
   Future<void> refreshNeighbors() async {
-    // Don't clear peers immediately - let discovery and timeout handle it
-    // Just trigger a new discovery broadcast
-    await sayHello();
+    // Prevent multiple simultaneous refreshes
+    if (_isRefreshing) return;
+    _isRefreshing = true;
     
-    // Optionally mark all current peers as "old" for faster timeout
-    final now = DateTime.now();
-    final staleTime = now.subtract(Duration(minutes: 1)); // Mark as 1 minute old
-    
-    for (final peer in _peers.values) {
-      // Update peer with earlier timestamp to encourage faster rediscovery
-      _peers[peer.address] = peer.copyWith(lastSeen: staleTime);
+    try {
+      // Clear peers that haven't been seen recently (older than 30 seconds)
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(Duration(seconds: 30));
+      
+      final keysToRemove = <String>[];
+      for (final entry in _peers.entries) {
+        if (entry.value.lastSeen.isBefore(cutoffTime)) {
+          keysToRemove.add(entry.key);
+        }
+      }
+      
+      for (final key in keysToRemove) {
+        _peers.remove(key);
+      }
+      
+      // Update interface cache before discovery
+      await _updateInterfaceCache();
+      
+      // Trigger a new discovery broadcast
+      await sayHello();
+      
+      notifyListeners();
+      
+      // Wait a bit to prevent rapid refreshes
+      await Future.delayed(Duration(seconds: 1));
+    } finally {
+      _isRefreshing = false;
     }
-    
-    notifyListeners();
   }
+  
+  bool _isRefreshing = false;
 
-  // BUGFIX: Refresh peer information when network interfaces change
   Future<void> refreshPeers() async {
     // Use the same smart refresh approach - don't clear peers immediately
     await refreshNeighbors();
@@ -160,7 +191,7 @@ class PeerDiscoveryService extends ChangeNotifier {
   void sayGoodbye() {
     if (_socket == null) return;
     
-    final message = BuddyMessage(
+    final message = DeviceMessage(
       type: MessageType.goodbye,
       port: _listenPort,
       signature: _localSignature,
@@ -177,12 +208,10 @@ class PeerDiscoveryService extends ChangeNotifier {
 
     final senderAddress = datagram.address.address;
 
-    // Transfer: Broadcast storm protection - like badAddrs.contains(sender)
     if (_badAddresses.contains(senderAddress)) {
       return;
     }
 
-    // Transfer: Check for local address (broadcast loop protection like localAddrs.contains)
     if (_isLocalAddress(datagram.address)) {
       final count = (_localAddressCount[senderAddress] ?? 0) + 1;
       _localAddressCount[senderAddress] = count;
@@ -194,24 +223,21 @@ class PeerDiscoveryService extends ChangeNotifier {
     }
 
     try {
-      final message = BuddyMessage.deserialize(datagram.data);
-      _processMessage(message, datagram.address); // Transfer: Pass sender from datagram
+      final message = DeviceMessage.deserialize(datagram.data);
+      _processMessage(message, datagram.address);
     } catch (e) {
-      // Transfer: Silently ignore invalid messages - no spam
     }
   }
 
-  // Transfer: Track local addresses like localAddrs in messenger.cpp
   final Set<String> _currentLocalAddresses = {};
 
   bool _isLocalAddress(InternetAddress address) {
-    // Transfer: Check if this is one of our local addresses (like localAddrs.contains(sender))
     return _currentLocalAddresses.contains(address.address) || 
            address.isLoopback || 
            address.address == '0.0.0.0';
   }
 
-  void _processMessage(BuddyMessage message, InternetAddress senderAddress) {
+  void _processMessage(DeviceMessage message, InternetAddress senderAddress) {
     // Ignore our own messages
     if (message.signature == _localSignature) return;
 
@@ -229,10 +255,20 @@ class PeerDiscoveryService extends ChangeNotifier {
         break;
         
       case MessageType.goodbye:
-        // Instant peer removal on goodbye message
-        final peer = _peers.remove(senderIp);
-        if (peer != null) {
-          _peerLostController.add(peer);
+        // Remove all peers from this sender IP
+        final peersToRemove = <String>[];
+        for (final entry in _peers.entries) {
+          if (entry.value.address == senderIp) {
+            peersToRemove.add(entry.key);
+          }
+        }
+        for (final key in peersToRemove) {
+          final peer = _peers.remove(key);
+          if (peer != null) {
+            _peerLostController.add(peer);
+          }
+        }
+        if (peersToRemove.isNotEmpty) {
           notifyListeners();
         }
         break;
@@ -246,68 +282,109 @@ class PeerDiscoveryService extends ChangeNotifier {
         _handleTransferResponse(message, senderAddress);
         break;
         
+      case MessageType.transferCancel:
+        _handleTransferCancel(message, senderAddress);
+        break;
+        
       default:
         break;
     }
   }
 
-  void _handleHelloMessage(BuddyMessage message, InternetAddress senderAddress, bool shouldReply) {
-    // Transfer: Use sender IP from UDP datagram as unique key (like QHash<QHostAddress, Peer>)
+  void _handleHelloMessage(DeviceMessage message, InternetAddress senderAddress, bool shouldReply) {
     final senderIp = senderAddress.address;
     
-    // Transfer: Parse signature like original: "Username at Hostname (Platform)"
     final signature = message.signature;
     final parts = signature.split(' at ');
     final name = parts.isNotEmpty ? parts[0] : 'Unknown User';
     
-    // Transfer: Use default port if message port is 0 (like protocolDefaultPort)
     final port = (message.port == 0) ? defaultPort : message.port;
     
-    // Transfer: Validate port range
     if (port <= 0 || port > 65535) {
       return;
     }
     
-    // Transfer: Immediate peer creation and response
     _createPeerAndReply(senderIp, name, port, signature, message, senderAddress, shouldReply);
   }
 
   Future<void> _createPeerAndReply(String senderIp, String name, int port, String signature, 
-      BuddyMessage message, InternetAddress senderAddress, bool shouldReply) async {
-    // Detect connection type based on IP address
-    final connectionType = await NetworkUtility.detectConnectionTypeFromIP(senderIp);
+      DeviceMessage message, InternetAddress senderAddress, bool shouldReply) async {
+    // Detect connection type based on IP address and local interface
+    String connectionType = await NetworkUtility.detectConnectionTypeFromIP(senderIp);
     
-    // Transfer: Create peer using sender IP as unique identifier (like messenger.cpp)
-    // Each IP address = separate peer entry (no grouping by signature)
+    // Also check which of our local interfaces can reach this peer
+    String? localInterface;
+    for (final entry in _interfaceInfoCache.entries) {
+      if (_isInSameNetwork(entry.key, senderIp)) {
+        localInterface = entry.value.type;
+        // If we have more specific info from our interface, use it
+        if (localInterface != 'Network' && localInterface != 'Unknown') {
+          connectionType = localInterface;
+        }
+        break;
+      }
+    }
+    
+    // Create unique ID for this network path
+    final pathId = '$senderIp:$port:$connectionType';
+    
+    // Check if this peer already exists
+    final existingPeer = _peers[pathId];
     final now = DateTime.now();
-    final peer = Peer(
-      id: senderIp, // Transfer: Key by IP address like QHash<QHostAddress, Peer>
-      name: name,
-      address: senderIp, // Transfer: Always use sender IP from UDP datagram
-      port: port,
-      platform: 'Network',
-      lastSeen: now,
-      signature: signature,
-      connectionType: connectionType,
-      adapterName: connectionType,
-      avatar: AvatarWebServer.instance.getAvatarUrl(senderIp, port), // Avatar URL
-    );
-
-    // Store peer by IP address - always update timestamp for existing peers
-    _peers[senderIp] = peer;
     
-    // Emit buddyFound for EVERY hello message (even existing peers)
-    _peerFoundController.add(peer);
-    notifyListeners();
+    // Only create/update if it's new or has been a while since last update
+    if (existingPeer == null || 
+        now.difference(existingPeer.lastSeen).inSeconds > 2) {
+      
+      final peer = Peer(
+        id: pathId, // Unique ID for this specific network path
+        name: name,
+        address: senderIp,
+        port: port,
+        platform: 'Network',
+        lastSeen: now,
+        signature: signature,
+        connectionType: connectionType,
+        adapterName: connectionType,
+        avatar: AvatarWebServer.instance.getAvatarUrl(senderIp, port), // Avatar URL
+      );
+
+      // Store peer by composite key - allows multiple paths to same device
+      _peers[pathId] = peer;
+      
+      // Only emit deviceFound for new peers or significant updates
+      if (existingPeer == null) {
+        _peerFoundController.add(peer);
+      }
+      
+      notifyListeners();
+    } else {
+      // Just update the timestamp for existing peer
+      _peers[pathId] = existingPeer.copyWith(lastSeen: now);
+    }
 
     // Reply with unicast if this was a broadcast - use proper message type
     if (shouldReply) {
-      final replyMessage = BuddyMessage(
+      final replyMessage = DeviceMessage(
         type: _listenPort == defaultPort ? MessageType.helloUnicast : MessageType.helloPortUnicast,
         port: _listenPort,
         signature: _localSignature,
       );
       _sendUnicast(replyMessage, senderAddress, port);
+    }
+  }
+
+  // Helper to check if two IPs are in the same network
+  bool _isInSameNetwork(String ip1, String ip2) {
+    try {
+      final parts1 = ip1.split('.').map(int.parse).toList();
+      final parts2 = ip2.split('.').map(int.parse).toList();
+      if (parts1.length != 4 || parts2.length != 4) return false;
+      
+      // Check if in same /24 subnet (common case)
+      return parts1[0] == parts2[0] && parts1[1] == parts2[1] && parts1[2] == parts2[2];
+    } catch (e) {
+      return false;
     }
   }
 
@@ -317,21 +394,29 @@ class PeerDiscoveryService extends ChangeNotifier {
     final name = interface.name.toLowerCase();
     
     // Only skip clearly problematic interfaces that would cause issues
-    // This is much more permissive than the previous filtering
     if (name.contains('loopback') ||
         name.contains('teredo') ||
         name.contains('isatap') ||
-        name.contains('6to4')) {
+        name.contains('6to4') ||
+        name.contains('tunnel')) {
       return false;
     }
     
-    // Use ALL other interfaces - WiFi, Ethernet, virtual, etc.
-    // This matches behavior of not filtering by interface type
-    return true;
+    // Check if interface has at least one valid IPv4 address
+    bool hasValidAddress = false;
+    for (final addr in interface.addresses) {
+      if (addr.type == InternetAddressType.IPv4 && !addr.isLoopback) {
+        hasValidAddress = true;
+        break;
+      }
+    }
+    
+    // Use ALL other interfaces that have valid addresses - WiFi, Ethernet, virtual, hotspot, etc.
+    return hasValidAddress;
   }
 
   // Improved broadcast message sending
-  Future<void> _broadcastMessage(BuddyMessage message) async {
+  Future<void> _broadcastMessage(DeviceMessage message) async {
     if (_socket == null) return;
     
     final data = message.serialize();
@@ -355,12 +440,15 @@ class PeerDiscoveryService extends ChangeNotifier {
         includeLinkLocal: true,
       );
 
+
       for (final interface in interfaces) {
         // Skip inactive interfaces
         if (interface.addresses.isEmpty) continue;
         
         // Only check if interface is up (no type filtering)
-        if (!_shouldUseInterface(interface)) continue;
+        if (!_shouldUseInterface(interface)) {
+          continue;
+        }
         
         for (final addr in interface.addresses) {
           // IPv4 only, not loopback
@@ -375,73 +463,111 @@ class PeerDiscoveryService extends ChangeNotifier {
           _localAddressCount[addr.address] = 0;
           _currentLocalAddresses.add(addr.address);
           
-          // Calculate broadcast for this interface using better logic
-          final broadcast = _calculateBroadcastAddress(addr.address);
+          
+          // Get broadcast address for this interface
+          final broadcast = _getBroadcastAddress(addr.address);
           if (broadcast != null) {
             // Send to all discovered ports
             for (final port in ports) {
               try {
                 _socket!.send(data, broadcast, port);
               } catch (e) {
-                // Ignore broadcast failures on specific interfaces
+                // Network broadcast may fail on some interfaces
               }
             }
+          } else {
+            // If no broadcast address, try direct subnet scanning as fallback
+            _performDirectSubnetScan(addr.address, ports, data);
+          }
+          
+          // Also send to common broadcast addresses as fallback
+          // This helps with networks that might block subnet-specific broadcasts
+          try {
+            // Try 255.255.255.255 (limited broadcast)
+            final limitedBroadcast = InternetAddress('255.255.255.255');
+            for (final port in ports) {
+              try {
+                _socket!.send(data, limitedBroadcast, port);
+              } catch (e) {
+                // Ignore - some systems don't allow this
+              }
+            }
+          } catch (e) {
+            // Ignore
           }
         }
       }
     } catch (e) {
-      // Silently handle broadcast errors
     }
   }
 
-  // Improved broadcast address calculation
-  InternetAddress? _calculateBroadcastAddress(String ipAddress) {
+  // Store network interface info for better broadcast handling
+  final Map<String, NetworkInterfaceInfo> _interfaceInfoCache = {};
+
+  // Update network interface cache
+  Future<void> _updateInterfaceCache() async {
     try {
+      final interfaces = await NetworkUtility.getNetworkInterfaces();
+      _interfaceInfoCache.clear();
+      for (final interface in interfaces) {
+        _interfaceInfoCache[interface.address] = interface;
+      }
+    } catch (e) {
+      // Silent failure, will use fallback
+    }
+  }
+
+  // Get broadcast address for a specific IP
+  InternetAddress? _getBroadcastAddress(String ipAddress) {
+    try {
+      // First check cache for exact subnet info
+      final interfaceInfo = _interfaceInfoCache[ipAddress];
+      if (interfaceInfo?.broadcastAddress != null) {
+        return InternetAddress(interfaceInfo!.broadcastAddress!);
+      }
+      
+      // Fallback to simple calculation based on IP range
       final parts = ipAddress.split('.').map(int.parse).toList();
       if (parts.length != 4) return null;
-
-      // For most common network configurations, calculate broadcast address
-      // This is more comprehensive than the previous simple approach
       
+      String broadcastAddr;
+      
+      // Use the original simple logic that was working
       // Class A private: 10.0.0.0/8
       if (parts[0] == 10) {
-        // Typically use /24 subnets in 10.x.x.x networks
-        return InternetAddress('${parts[0]}.${parts[1]}.${parts[2]}.255');
+        broadcastAddr = '${parts[0]}.${parts[1]}.${parts[2]}.255';
       }
-      
       // Class B private: 172.16.0.0/12
-      if (parts[0] == 172 && parts[1] >= 16 && parts[1] <= 31) {
-        // Typically use /24 subnets in 172.16-31.x.x networks
-        return InternetAddress('${parts[0]}.${parts[1]}.${parts[2]}.255');
+      else if (parts[0] == 172 && parts[1] >= 16 && parts[1] <= 31) {
+        broadcastAddr = '${parts[0]}.${parts[1]}.${parts[2]}.255';
       }
-      
       // Class C private: 192.168.0.0/16
-      if (parts[0] == 192 && parts[1] == 168) {
-        // Standard /24 subnet
-        return InternetAddress('${parts[0]}.${parts[1]}.${parts[2]}.255');
+      else if (parts[0] == 192 && parts[1] == 168) {
+        broadcastAddr = '${parts[0]}.${parts[1]}.${parts[2]}.255';
       }
-      
       // Link-local addresses: 169.254.0.0/16
-      if (parts[0] == 169 && parts[1] == 254) {
-        return InternetAddress('169.254.255.255');
+      else if (parts[0] == 169 && parts[1] == 254) {
+        broadcastAddr = '169.254.255.255';
+      }
+      // For other IP ranges, assume /24 subnet
+      else {
+        broadcastAddr = '${parts[0]}.${parts[1]}.${parts[2]}.255';
       }
       
-      // For other IP ranges, assume /24 subnet (most common)
-      return InternetAddress('${parts[0]}.${parts[1]}.${parts[2]}.255');
+      return InternetAddress(broadcastAddr);
       
     } catch (e) {
       return null;
     }
   }
 
-  void _sendUnicast(BuddyMessage message, InternetAddress address, int port) {
+  void _sendUnicast(DeviceMessage message, InternetAddress address, int port) {
     if (_socket == null) return;
     
     try {
       final data = message.serialize();
       _socket!.send(data, address, port);
     } catch (e) {
-      // Transfer: Ignore unicast send errors (like sendPacket)
     }
   }
 
@@ -451,10 +577,12 @@ class PeerDiscoveryService extends ChangeNotifier {
 
   // Initial rapid discovery for faster peer detection
   void _startInitialDiscovery() {
+    int discoveryCount = 0;
     _initialDiscoveryTimer = Timer.periodic(initialDiscoveryInterval, (timer) {
       sayHello();
-      // Stop rapid discovery after 30 seconds
-      if (timer.tick >= 15) {
+      discoveryCount++;
+      // Stop rapid discovery after 5 broadcasts (15 seconds)
+      if (discoveryCount >= 5) {
         timer.cancel();
         _initialDiscoveryTimer = null;
       }
@@ -469,6 +597,9 @@ class PeerDiscoveryService extends ChangeNotifier {
     // Reduced frequency to avoid too frequent refreshes
     _networkWatchTimer = Timer.periodic(Duration(seconds: 60), (timer) async {
       try {
+        // Update interface cache
+        await _updateInterfaceCache();
+        
         // Get current network interfaces
         final interfaces = await NetworkInterface.list(
           includeLoopback: false,
@@ -477,7 +608,7 @@ class PeerDiscoveryService extends ChangeNotifier {
         
         final currentInterfaces = <String>{};
         for (final interface in interfaces) {
-          if (_shouldUseInterface(interface)) {  // Use new permissive filtering
+          if (_shouldUseInterface(interface)) {
             for (final addr in interface.addresses) {
               if (addr.type == InternetAddressType.IPv4) {
                 currentInterfaces.add('${interface.name}:${addr.address}');
@@ -495,9 +626,48 @@ class PeerDiscoveryService extends ChangeNotifier {
         
         lastNetworkInterfaces = currentInterfaces;
       } catch (e) {
-        // Silently handle network checking errors
       }
     });
+  }
+
+  // Direct subnet scan as fallback when broadcast fails
+  void _performDirectSubnetScan(String localIP, Set<int> ports, List<int> messageData) {
+    // DISABLED: Direct subnet scanning can cause network flooding
+    // and may interfere with normal discovery
+    return;
+    
+    /* Original implementation - kept for reference
+    if (_socket == null) return;
+    
+    try {
+      final parts = localIP.split('.').map(int.parse).toList();
+      if (parts.length != 4) return;
+      
+      // Scan the local /24 subnet (most common for home/office networks)
+      final subnet = '${parts[0]}.${parts[1]}.${parts[2]}';
+      
+      // Limit scan to avoid flooding
+      for (int i = 1; i <= 254; i++) {
+        if (i == parts[3]) continue; // Skip self
+        
+        final targetIP = '$subnet.$i';
+        final targetAddress = InternetAddress.tryParse(targetIP);
+        
+        if (targetAddress != null) {
+          // Send unicast to each IP in the subnet
+          for (final port in ports) {
+            try {
+              _socket!.send(messageData, targetAddress, port);
+            } catch (e) {
+              // Ignore send errors
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Silent failure
+    }
+    */
   }
 
   // Peer cleanup timer - remove inactive peers based on timeout
@@ -529,19 +699,19 @@ class PeerDiscoveryService extends ChangeNotifier {
     });
   }
 
-  Future<String> _generateLocalSignature(String? buddyName, String? platform) async {
+  Future<String> _generateLocalSignature(String? deviceName, String? platform) async {
     try {
       // Use exact method for generating signature
-      if (buddyName != null && buddyName.isNotEmpty) {
-        // If custom buddy name is provided, use it with system hostname and platform
-        return '${SystemInfo.getUsername(buddyName)} at ${SystemInfo.getSystemHostname()} (${SystemInfo.getPlatformName()})';
+      if (deviceName != null && deviceName.isNotEmpty) {
+        // If custom device name is provided, use it with system hostname and platform
+        return '${SystemInfo.getUsername(deviceName)} at ${SystemInfo.getSystemHostname()} (${SystemInfo.getPlatformName()})';
       } else {
         // Use full system signature
         return SystemInfo.getSystemSignature();
       }
     } catch (e) {
       // Provide optimistic fallback signature
-      final fallbackName = buddyName?.isNotEmpty == true ? buddyName! : 'User';
+      final fallbackName = deviceName?.isNotEmpty == true ? deviceName! : 'User';
       final fallbackHost = 'Computer';
       final fallbackPlatform = platform?.isNotEmpty == true ? platform! : 'Windows';
       return '$fallbackName at $fallbackHost ($fallbackPlatform)';
@@ -549,8 +719,15 @@ class PeerDiscoveryService extends ChangeNotifier {
   }
 
   // Transfer request handling methods
-  void _handleTransferRequest(BuddyMessage message, InternetAddress senderAddress) {
-    final senderPeer = _peers[senderAddress.address];
+  void _handleTransferRequest(DeviceMessage message, InternetAddress senderAddress) {
+    // Find the peer that sent this request
+    Peer? senderPeer;
+    for (final peer in _peers.values) {
+      if (peer.address == senderAddress.address) {
+        senderPeer = peer;
+        break;
+      }
+    }
     if (senderPeer == null) return;
     
     final requestData = {
@@ -567,8 +744,15 @@ class PeerDiscoveryService extends ChangeNotifier {
     _transferRequestController.add(requestData);
   }
   
-  void _handleTransferResponse(BuddyMessage message, InternetAddress senderAddress) {
-    final senderPeer = _peers[senderAddress.address];
+  void _handleTransferResponse(DeviceMessage message, InternetAddress senderAddress) {
+    // Find the peer that sent this response
+    Peer? senderPeer;
+    for (final peer in _peers.values) {
+      if (peer.address == senderAddress.address) {
+        senderPeer = peer;
+        break;
+      }
+    }
     if (senderPeer == null) return;
     
     final responseData = {
@@ -583,6 +767,28 @@ class PeerDiscoveryService extends ChangeNotifier {
     _transferResponseController.add(responseData);
   }
   
+  void _handleTransferCancel(DeviceMessage message, InternetAddress senderAddress) {
+    // Find the peer that sent this cancel
+    Peer? senderPeer;
+    for (final peer in _peers.values) {
+      if (peer.address == senderAddress.address) {
+        senderPeer = peer;
+        break;
+      }
+    }
+    if (senderPeer == null) return;
+    
+    final cancelData = {
+      'transferId': message.transferId,
+      'senderPeer': senderPeer,
+      'senderSignature': message.signature,
+      'reason': message.transferDescription, // Cancel reason
+      'timestamp': DateTime.now(),
+    };
+    
+    _transferCancelController.add(cancelData);
+  }
+  
   // Public methods for sending transfer requests and responses
   void sendTransferRequest({
     required Peer targetPeer,
@@ -592,7 +798,7 @@ class PeerDiscoveryService extends ChangeNotifier {
     required String transferDescription,
     List<String>? fileNames,
   }) {
-    final message = BuddyMessage.transferRequest(
+    final message = DeviceMessage.transferRequest(
       transferId: transferId,
       senderSignature: _localSignature,
       totalFiles: totalFiles,
@@ -612,7 +818,7 @@ class PeerDiscoveryService extends ChangeNotifier {
     required String transferId,
     String? saveLocation,
   }) {
-    final message = BuddyMessage.transferAccept(
+    final message = DeviceMessage.transferAccept(
       transferId: transferId,
       receiverSignature: _localSignature,
       saveLocation: saveLocation,
@@ -629,9 +835,26 @@ class PeerDiscoveryService extends ChangeNotifier {
     required String transferId,
     String? reason,
   }) {
-    final message = BuddyMessage.transferDecline(
+    final message = DeviceMessage.transferDecline(
       transferId: transferId,
       receiverSignature: _localSignature,
+      reason: reason,
+    );
+    
+    final targetAddress = InternetAddress.tryParse(targetPeer.address);
+    if (targetAddress != null) {
+      _sendUnicast(message, targetAddress, targetPeer.port);
+    }
+  }
+  
+  void sendTransferCancel({
+    required Peer targetPeer,
+    required String transferId,
+    String? reason,
+  }) {
+    final message = DeviceMessage.transferCancel(
+      transferId: transferId,
+      senderSignature: _localSignature,
       reason: reason,
     );
     
@@ -650,6 +873,7 @@ class PeerDiscoveryService extends ChangeNotifier {
     _peerLostController.close();
     _transferRequestController.close();
     _transferResponseController.close();
+    _transferCancelController.close();
     super.dispose();
   }
 }

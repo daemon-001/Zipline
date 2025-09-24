@@ -79,7 +79,7 @@ class AppStateProvider extends ChangeNotifier {
       
       // Create and save default settings
       _settings = AppSettings(
-        buddyName: SystemInfo.getSystemHostname(), // Use device name as default
+        deviceName: SystemInfo.getSystemHostname(), // Use device name as default
         destPath: downloadsPath,
       );
       
@@ -89,7 +89,7 @@ class AppStateProvider extends ChangeNotifier {
     } catch (e) {
       // Provide fallback settings instead of failing
       _settings = AppSettings(
-        buddyName: SystemInfo.getSystemHostname(), // Use device name as fallback
+        deviceName: SystemInfo.getSystemHostname(), // Use device name as fallback
         destPath: Platform.isWindows ? 'C:\\Downloads\\Zipline' : '/home/user/Downloads/Zipline',
       );
       _isInitialized = true;

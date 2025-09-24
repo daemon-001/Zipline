@@ -7,7 +7,6 @@ import '../models/peer.dart';
 import '../models/transfer_item.dart';
 import '../models/transfer_session.dart';
 import '../services/file_transfer_service.dart';
-import '../widgets/top_notification.dart';
 
 class SendPage extends StatefulWidget {
   final Peer peer;
@@ -749,12 +748,6 @@ class _SendPageState extends State<SendPage> with TickerProviderStateMixin {
       if (success) {
         if (mounted) {
           Navigator.of(context).pop();
-          TopNotification.show(
-            context,
-            title: 'Transfer Started',
-            message: 'File transfer has been initiated',
-            type: NotificationType.success,
-          );
         }
       } else {
         _showError('Failed to start file transfer');
@@ -779,12 +772,6 @@ class _SendPageState extends State<SendPage> with TickerProviderStateMixin {
       if (success) {
         if (mounted) {
           Navigator.of(context).pop();
-          TopNotification.show(
-            context,
-            title: 'Text Sent',
-            message: 'Text sent successfully',
-            type: NotificationType.success,
-          );
         }
       } else {
         _showError('Failed to send text');
@@ -808,11 +795,6 @@ class _SendPageState extends State<SendPage> with TickerProviderStateMixin {
   }
 
   void _showError(String message) {
-    TopNotification.show(
-      context,
-      title: 'Error',
-      message: message,
-      type: NotificationType.error,
-    );
+    // Error silently handled
   }
 }

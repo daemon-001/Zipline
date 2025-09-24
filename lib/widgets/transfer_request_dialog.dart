@@ -55,7 +55,7 @@ class _TransferRequestDialogState extends State<TransferRequestDialog> {
         });
       }
     } catch (e) {
-      // Handle error silently or show a snackbar
+      // Error silently handled
     } finally {
       setState(() {
         _isSelectingLocation = false;
